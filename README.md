@@ -15,7 +15,7 @@ ClassDock 是一个面向教学场景的桌面侧边栏工具集，致力于将�
 
 ## 技术架构
 
-ClassDock 基于 **Tauri 2.x** 构建：
+ClassDock 基于 **Tauri** 构建：
 
 - 前端使用 **TypeScript + React**；
 - 后端使用 **Rust** 处理系统级能力；
