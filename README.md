@@ -17,31 +17,24 @@ ClassDock 是一个面向教学场景的桌面侧边栏工具集，致力于将�
 
 ## 技术架构
 
-ClassDock 基于 **Tauri** 构建：
+ClassDock 基于 **Avalonia UI (.NET)** 构建：
 
-- 前端使用 **TypeScript + React**；
-- 后端使用 **Rust** 处理系统级能力；
-- 通过 Tauri 插件与系统接口实现窗口管理、全局快捷键、截屏、进程启动等功能；
+- 前端使用 **C# + Avalonia XAML**；
+- 通过原生窗口能力实现透明覆盖、点击穿透、全局置顶、截屏、进程启动等功能；
 - 插件系统设计遵循权限沙箱原则，避免插件直接获得过高系统权限。
 
 ## 运行环境要求
 
-运行 ClassDock 不需要安装 Node.js、Rust 或 Visual Studio Build Tools。
-
 ### Windows
 
 - **操作系统**：Windows 10 版本 1803 及以上，或 Windows 11
-
-- **依赖框架**：必须安装 Microsoft Edge WebView2 Runtime
-
+- **运行时**：.NET Desktop Runtime 8.0 及以上（自包含发布则无需安装）
 - **推荐环境**：双核 CPU、8GB 内存、500MB 以上可用磁盘空间
 
 ### Linux
 
-- **操作系统**：Ubuntu 22.04 及以上，或其他提供 WebKitGTK 4.1 的发行版
-
-- **依赖组件**：`libwebkit2gtk-4.1`、`libgtk-3` 及相关托盘、网络依赖
-
+- **操作系统**：Ubuntu 22.04 及以上
+- **依赖组件**：`libfontconfig1` 及相关托盘、网络依赖
 - **推荐环境**：双核 CPU、8GB 内存、500MB 以上可用磁盘空间
 
 ## 项目进度
@@ -57,8 +50,6 @@ ClassDock 基于 **Tauri** 构建：
 - [ ] v1 **Amphoreus**
 
 ## 贡献
-
-(虽然文件都没有,但还是先把这个写上吧)
 
 ### 提交 Issue
 
@@ -79,8 +70,7 @@ ClassDock 基于 **Tauri** 构建：
 ### 开发准备
 
 如果你希望参与开发，需要安装以下环境：
-- Node.js
-- Rust 工具链
+- .NET SDK
 - 对应平台的系统依赖
 
 ## 许可证
