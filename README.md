@@ -2,11 +2,12 @@
 
 ClassDock 是一个面向教学场景的桌面侧边栏工具集，致力于将常用教学工具整合到同一入口。它强调易用性、便捷性与自由，希望帮助教师在不打断课堂节奏的前提下，更轻松地使用教学中的常用功能，从而优化教学体验环境。
 
-## 当前进度与下一小版本安排
+## 当前进度
+
 - [x] 做出面板
 - [x] 做出"关于"页
 - [x] 一个潦草的封面
-- [ ] 做出“屏幕批注”功能
+
 ## 功能
 
 ### 基本功能
@@ -14,6 +15,7 @@ ClassDock 是一个面向教学场景的桌面侧边栏工具集，致力于将�
 - [ ] 屏幕批注
 - [ ] 截屏
 - [ ] 计时器/倒计时
+
 ### 联动类功能
 
 - [ ] 其他教室类应用功能调用(IPC/URL)
@@ -37,7 +39,7 @@ ClassDock 基于 **WinUI 3 (Windows App SDK)** 构建：
 
 ### Windows
 
-- **操作系统**：Windows 10 版本 1803 及以上，或 Windows 11
+- **操作系统**：Windows 10 版本 1809（10.0.17763）及以上，或 Windows 11
 - **运行时**：.NET Desktop Runtime 8.0 及以上（自包含发布则无需安装）
 - **推荐环境**：双核 CPU、8GB 内存、500MB 以上可用磁盘空间
 
@@ -47,15 +49,59 @@ ClassDock 基于 **WinUI 3 (Windows App SDK)** 构建：
 - **依赖组件**：`libfontconfig1` 及相关托盘、网络依赖
 - **推荐环境**：双核 CPU、8GB 内存、500MB 以上可用磁盘空间
 
+## 构建与运行
+
+### 构建前准备
+
+- **.NET SDK**：8.0 及以上（`dotnet --version` 可验证）
+- **工作负载**：无需单独安装，WinUI 3 与 Windows App SDK 通过 NuGet 包还原
+- **平台**：仅支持 Windows x64（项目已固定 `win-x64`）
+
+<br />
+
+### 构建
+
+在项目目录（`ClassDock.csproj` 所在目录）执行：
+
+```powershell
+# Debug 构建
+dotnet build
+
+# Release 构建
+dotnet build -c Release
+```
+
+### 运行
+
+```powershell
+# 直接运行
+dotnet run
+
+# 运行构建产物
+# Release
+.\bin\Release\net8.0-windows10.0.19041.0\win-x64\ClassDock.exe
+# Debug
+.\bin\Debug\net8.0-windows10.0.19041.0\win-x64\ClassDock.exe
+```
+
+### 常见问题
+
+- **构建报 MSB3027（文件被占用）**：ClassDock.exe 正在运行，先结束进程再构建：
+  ```powershell
+  Stop-Process -Name ClassDock
+  ```
+- **启动后看不到白条**：确认没有其他置顶窗口遮挡屏幕右缘，并检查分辨率缩放（白条按 DPI 自适应，支持 Per-Monitor V2）。
+
 ## 项目进度
 
 - [x] 新建文件夹
 - [x] 创建Readme.md
 - [x] 明确实现方案
-- [ ] 完成可用测试版本
-
+- [x] 完成可用测试版本
+- [ ] 做出“屏幕批注”功能
 
 ## 版本
+
 - [ ] v0 **In the Making**
 - [ ] v1 **Amphoreus**
 
@@ -75,11 +121,12 @@ ClassDock 基于 **WinUI 3 (Windows App SDK)** 构建：
 
 ### 代码贡献流程
 
-> [Tips] 此处还没想好怎么弄
+> \[Tips] 此处还没想好怎么弄
 
 ### 开发准备
 
 如果你希望参与开发，需要安装以下环境：
+
 - .NET SDK
 - 对应平台的系统依赖
 
