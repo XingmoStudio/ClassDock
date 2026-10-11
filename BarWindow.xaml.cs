@@ -27,6 +27,11 @@ public sealed partial class BarWindow : Window
     private PanelWindow? _panel;
     private IntPtr _hwnd;
 
+    // 屏幕批注会话
+    private AnnotationCanvasWindow? _annoCanvas;
+    private AnnotationToolbarWindow? _annoToolbar;
+    private bool _annotationActive;
+
     // 屏幕度量（物理像素 / DIP）
     private int _screenWpx, _screenHpx;
     private double _scale = 1;
@@ -117,7 +122,11 @@ public sealed partial class BarWindow : Window
         _openXpx = _screenWpx - _spanPx;
         _closedXpx = _screenWpx;
 
-        _panel ??= new PanelWindow();
+        if (_panel is null)
+        {
+            _panel = new PanelWindow();
+            _panel.AnnotationRequested += EnterAnnotation;
+        }
         _panel.Configure(_panelWpx, _panelHpx, _panelTopPx, _closedXpx);
     }
 
@@ -233,6 +242,50 @@ public sealed partial class BarWindow : Window
         if (!panel.AppWindow.IsVisible) return;
         StartAnim(fromX: _openXpx, toX: _closedXpx,
             onDone: () => panel.AppWindow.Hide());
+    }
+
+    // ── 屏幕批注会话（界面阶段：画布 + 竖排工具栏） ──
+
+    private void EnterAnnotation()
+    {
+        if (_panel is null || _annotationActive) return;
+        _annotationActive = true;
+
+        StopFocusWatch();
+        StopAnim();
+
+        // 收起主面板；白条保持隐藏
+        _panel.IsOpen = false;
+        if (_panel.AppWindow.IsVisible) _panel.AppWindow.Hide();
+
+        // 画布不激活（不打断前台内容），工具栏激活以接收点击
+        _annoCanvas = new AnnotationCanvasWindow();
+        _annoToolbar = new AnnotationToolbarWindow();
+        _annoToolbar.BackRequested += ExitAnnotation;
+
+        _annoCanvas.ShowFullscreen(_screenWpx, _screenHpx);
+        _annoToolbar.ShowAtRight(_screenWpx, _screenHpx, _scale);
+    }
+
+    private void ExitAnnotation()
+    {
+        if (!_annotationActive || _annoCanvas is null || _annoToolbar is null) return;
+        _annotationActive = false;
+
+        var canvas = _annoCanvas;
+        var toolbar = _annoToolbar;
+        _annoCanvas = null;
+        _annoToolbar = null;
+        toolbar.BackRequested -= ExitAnnotation;
+
+        canvas.PlayExit(() => { });
+        toolbar.PlayExit(() =>
+        {
+            canvas.AppWindow.Hide();
+            toolbar.AppWindow.Hide();
+            // 返回主面板（横向滑入恢复，白条仍隐藏）
+            OpenPanelAnimated();
+        });
     }
 
     /// <summary>

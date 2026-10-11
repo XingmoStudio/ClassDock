@@ -15,6 +15,9 @@ public sealed partial class PanelWindow : Window
 
     public IntPtr Hwnd { get; }
 
+    /// <summary>点击“屏幕批注”入口时触发（由 BarWindow 负责切换到批注界面）。</summary>
+    public event Action? AnnotationRequested;
+
     public PanelWindow()
     {
         InitializeComponent();
@@ -44,4 +47,7 @@ public sealed partial class PanelWindow : Window
         var win = new SettingsWindow();
         win.Activate();
     }
+
+    private void OnAnnotationClick(object sender, RoutedEventArgs e)
+        => AnnotationRequested?.Invoke();
 }

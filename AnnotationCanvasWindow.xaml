@@ -1,0 +1,13 @@
+<Window
+    x:Class="ClassDock.AnnotationCanvasWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!--
+      全屏批注层（界面阶段）：
+      置顶、无边框；背景为 Thin Acrylic；InkCanvas 铺满全屏。
+      工具栏由独立窗口 AnnotationToolbarWindow 提供，便于后续做点击穿透。
+    -->
+    <Grid x:Name="Root" Background="Transparent">
+        <InkCanvas x:Name="InkLayer" />
+    </Grid>
+</Window>

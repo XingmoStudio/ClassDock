@@ -5,7 +5,7 @@ ClassDock 是一个面向教学场景的桌面侧边栏工具集，致力于将�
 
 ![Placeholder](Assets/Title.png)
 
-## 当前进度
+## 当下
 
 - [x] 做出面板
 - [x] 做出"关于"页
