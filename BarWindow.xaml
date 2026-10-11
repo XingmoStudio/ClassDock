@@ -1,0 +1,15 @@
+<Window
+    x:Class="ClassDock.BarWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="ClassDock">
+    <!-- 右缘小白条：12x80 DIP 胶囊。
+         根元素 Background=Transparent + DwmGlass.Enable 实现窗口真透明；
+         Grip Border 的 CornerRadius=6（恰为半宽）渲染两端半圆。 -->
+    <Grid x:Name="Root" Background="Transparent">
+        <Border x:Name="Grip"
+                CornerRadius="6"
+                Background="White"
+                Opacity="0.85" />
+    </Grid>
+</Window>

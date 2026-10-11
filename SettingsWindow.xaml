@@ -1,0 +1,153 @@
+<Window
+    x:Class="ClassDock.SettingsWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="ClassDock 设置">
+
+    <!-- 标题栏与三个窗口按键合并：第 0 行为拖拽区（右端只放版本号） -->
+    <Grid x:Name="Root" Background="#FFF9F9F9" RowDefinitions="48,*">
+
+        <!-- 自绘标题栏拖拽区；右侧留出 3 个系统按键（约 46px×3）的位置 -->
+        <Grid x:Name="AppTitleBar" Grid.Row="0" Background="Transparent">
+            <TextBlock
+                HorizontalAlignment="Right"
+                VerticalAlignment="Center"
+                Margin="0,0,156,0"
+                FontSize="12"
+                Foreground="#99000000"
+                Text="0.0.1.0 (Codename In The Making)" />
+        </Grid>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="180" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- 左侧导航 -->
+            <Border
+                Grid.Column="0"
+                Background="#FFF3F3F3"
+                BorderBrush="#14000000"
+                BorderThickness="0,0,1,0"
+                Padding="8,12,8,12">
+                <StackPanel Spacing="4">
+                    <TextBlock
+                        Margin="8,0,0,12"
+                        FontSize="20"
+                        FontWeight="SemiBold"
+                        Text="设置" />
+                    <Button
+                        x:Name="NavAbout"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Left"
+                        Background="#19000000"
+                        BorderThickness="0"
+                        CornerRadius="4"
+                        Content="关于"
+                        Click="OnNavAboutClick" />
+                    <Button
+                        x:Name="NavExit"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Left"
+                        Foreground="#FFC42B1C"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        CornerRadius="4"
+                        Content="关闭"
+                        Click="OnNavExitClick" />
+                </StackPanel>
+            </Border>
+
+            <!-- 右侧内容：关于 -->
+            <ScrollViewer Grid.Column="1">
+                <StackPanel Padding="24,20,24,24" Spacing="16">
+
+                    <!-- 封面图 -->
+                    <Border CornerRadius="8">
+                        <Image
+                            Source="Assets/Title.png"
+                            Stretch="UniformToFill" />
+                    </Border>
+
+                    <TextBlock
+                        FontSize="24"
+                        FontWeight="SemiBold"
+                        Text="关于 ClassDock" />
+
+                    <!-- 版本信息卡片 -->
+                    <Border
+                        Background="#FFFFFFFF"
+                        BorderBrush="#14000000"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="16,14,16,14">
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                            <FontIcon
+                                Grid.Column="0"
+                                Margin="0,0,12,0"
+                                FontFamily="Segoe Fluent Icons,Segoe MDL2 Assets"
+                                FontSize="20"
+                                Glyph="&#xE7F8;" />
+                            <TextBlock
+                                Grid.Column="1"
+                                VerticalAlignment="Center"
+                                FontSize="14"
+                                FontWeight="SemiBold"
+                                Text="ClassDock" />
+                            <TextBlock
+                                Grid.Column="2"
+                                VerticalAlignment="Center"
+                                FontSize="13"
+                                Foreground="#66000000"
+                                Text="0.0.1.0 (Codename In The Making)" />
+                        </Grid>
+                    </Border>
+
+                    <!-- 版权卡片 -->
+                    <Border
+                        Background="#FFFFFFFF"
+                        BorderBrush="#14000000"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="16,14,16,14">
+                        <StackPanel Spacing="4">
+                            <TextBlock FontSize="13" Text="Copyright (c) 2026 Xingmo" />
+                            <TextBlock
+                                FontSize="12"
+                                Foreground="#66000000"
+                                Text="本项目基于 GNU General Public License v3.0 获得许可。" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 常用链接卡片 -->
+                    <Border
+                        Background="#FFFFFFFF"
+                        BorderBrush="#14000000"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="16,14,16,14">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock
+                                Grid.Column="0"
+                                VerticalAlignment="Center"
+                                FontSize="13"
+                                FontWeight="SemiBold"
+                                Text="常用链接" />
+                            <StackPanel
+                                Grid.Column="1"
+                                Orientation="Horizontal"
+                                Spacing="12">
+                                <HyperlinkButton
+                                    Content="项目主页"
+                                    FontSize="13"
+                                    NavigateUri="https://github.com/XingmoStudio/ClassDock" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+    </Grid>
+</Window>
