@@ -29,7 +29,6 @@ public sealed partial class BarWindow : Window
 
     // 屏幕批注会话
     private AnnotationCanvasWindow? _annoCanvas;
-    private AnnotationToolbarWindow? _annoToolbar;
     private bool _annotationActive;
 
     // 屏幕度量（物理像素 / DIP）
@@ -244,7 +243,7 @@ public sealed partial class BarWindow : Window
             onDone: () => panel.AppWindow.Hide());
     }
 
-    // ── 屏幕批注会话（界面阶段：画布 + 竖排工具栏） ──
+    // ── 屏幕批注会话（画布 + 同窗口内的竖排工具栏） ──
 
     private void EnterAnnotation()
     {
@@ -254,35 +253,45 @@ public sealed partial class BarWindow : Window
         StopFocusWatch();
         StopAnim();
 
-        // 收起主面板；白条保持隐藏
+        // 收起主面板与白条；等 DWM 重绘完再截屏，避免把面板截进背景
         _panel.IsOpen = false;
-        if (_panel.AppWindow.IsVisible) _panel.AppWindow.Hide();
+        _panel.AppWindow.Hide();
 
-        // 画布不激活（不打断前台内容），工具栏激活以接收点击
+        var delay = DispatcherQueue.CreateTimer();
+        delay.Interval = TimeSpan.FromMilliseconds(160);
+        delay.IsRepeating = false;
+        delay.Tick += (_, _) =>
+        {
+            delay.Stop();
+            if (!_annotationActive) return;
+            StartAnnotationWindow();
+        };
+        delay.Start();
+    }
+
+    private void StartAnnotationWindow()
+    {
+        // 先截屏，再让全屏画布以快照为背景出现
+        var snapshot = ScreenSnapshot.Capture();
+
         _annoCanvas = new AnnotationCanvasWindow();
-        _annoToolbar = new AnnotationToolbarWindow();
-        _annoToolbar.BackRequested += ExitAnnotation;
-
+        if (snapshot is not null) _annoCanvas.SetSnapshot(snapshot);
+        _annoCanvas.ExitRequested += ExitAnnotation;
         _annoCanvas.ShowFullscreen(_screenWpx, _screenHpx);
-        _annoToolbar.ShowAtRight(_screenWpx, _screenHpx, _scale);
     }
 
     private void ExitAnnotation()
     {
-        if (!_annotationActive || _annoCanvas is null || _annoToolbar is null) return;
+        if (!_annotationActive || _annoCanvas is null) return;
         _annotationActive = false;
 
         var canvas = _annoCanvas;
-        var toolbar = _annoToolbar;
         _annoCanvas = null;
-        _annoToolbar = null;
-        toolbar.BackRequested -= ExitAnnotation;
+        canvas.ExitRequested -= ExitAnnotation;
 
-        canvas.PlayExit(() => { });
-        toolbar.PlayExit(() =>
+        canvas.PlayExit(() =>
         {
             canvas.AppWindow.Hide();
-            toolbar.AppWindow.Hide();
             // 返回主面板（横向滑入恢复，白条仍隐藏）
             OpenPanelAnimated();
         });
