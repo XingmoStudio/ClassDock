@@ -8,6 +8,7 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Shapes;
+using Path = Microsoft.UI.Xaml.Shapes.Path;
 using Windows.Foundation;
 using Windows.Graphics;
 using Windows.System;
@@ -71,9 +72,13 @@ public sealed partial class AnnotationCanvasWindow : Window
         AppWindow.IsShownInSwitchers = false;
 
         Root.Loaded += (_, _) => PlayEnter();
-        PenButton.Foreground = AccentBrush;
+        IconOf(PenButton).Fill = AccentBrush;
         AddAccelerators();
     }
+
+    /// <summary>按钮内容 = Viewbox + Path，取出其中的 Path 以便切换选中态颜色。
+    /// （Path 上不能写 x:Name——XamlCompiler 会静默崩溃；也不支持 AncestorType 绑定。）</summary>
+    private static Path IconOf(ButtonBase button) => (Path)((Viewbox)button.Content).Child;
 
     /// <summary>铺满主屏（物理像素）并显示；不激活，避免打断前台内容。</summary>
     public void ShowFullscreen(int screenWpx, int screenHpx)
@@ -90,15 +95,18 @@ public sealed partial class AnnotationCanvasWindow : Window
     private void OnToolClick(object sender, RoutedEventArgs e)
     {
         var clicked = (ToggleButton)sender;
-        var tools = new[] { PenButton, ShapesButton, EraserButton, RulerButton };
+        var tools = new (ToggleButton Button, Path Icon)[]
+        {
+            (PenButton, IconOf(PenButton)), (ShapesButton, IconOf(ShapesButton)),
+            (EraserButton, IconOf(EraserButton)), (RulerButton, IconOf(RulerButton))
+        };
 
-        foreach (var button in tools)
+        foreach (var (button, icon) in tools)
         {
             bool active = ReferenceEquals(button, clicked);
             button.IsChecked = active;
-            button.Foreground = active ? AccentBrush : NormalBrush;
+            icon.Fill = active ? AccentBrush : NormalBrush;
         }
-
         AnnotationTool tool = AnnotationTool.Pen;
         if (ReferenceEquals(clicked, ShapesButton)) tool = AnnotationTool.Shapes;
         else if (ReferenceEquals(clicked, EraserButton)) tool = AnnotationTool.Eraser;
