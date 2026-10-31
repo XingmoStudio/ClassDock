@@ -437,7 +437,7 @@
                                     VerticalAlignment="Center"
                                     FontSize="13"
                                     Foreground="#66000000"
-                                    Text="0.0.1.0 (Codename In The Making)" />
+                                    Text="0.0.5.0 (Codename PaintingTheWorld)" />
                             </Grid>
                         </Border>
 

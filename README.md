@@ -5,6 +5,7 @@ ClassDock 是一个面向教学场景的桌面侧边栏工具集，致力于将�
 ![Placeholder](Assets/Title.png)
 
 ## 当下
+
 - [x] 菜单选项-屏幕批注 与 对应子菜单
 - [x] 新的设置界面
 
@@ -110,9 +111,13 @@ dotnet run
 
 ## 版本
 
-- [x] v0 **In the Making**
+### V0 **InTheMaking 制作中**
+
 - [ ] 0.1 PaintingTheWorld 绘世界
-- [ ] v1 **Amphoreus**
+
+### V1 **Amphoreus 永恒之地**
+
+- [ ] v1.0 **Amphoreus 永恒之地**
 
 ## 贡献
 
