@@ -28,6 +28,18 @@ public sealed partial class SettingsWindow : Window
     private Border? _selectedAccent;
     private bool _loadingSettings;
 
+    // 侧边栏收起状态与两个分组的展开状态
+    private bool _collapsed;
+    private bool _generalExpanded = true;
+    private bool _toolsExpanded = true;
+
+    private static readonly Thickness IconMarginExpanded = new(7, 0, 0, 0);
+    private static readonly Thickness IconMarginCollapsed = new(6.5, 0, 0, 0);
+    private static readonly Thickness NavPadding = new(8, 0, 8, 0);
+    private static readonly Thickness NavPaddingCollapsed = new(0);
+    private static readonly Thickness HeaderMarginExpanded = new(10, 2, 0, 12);
+    private static readonly Thickness HeaderMarginCollapsed = new(4, 2, 0, 12);
+
     public SettingsWindow()
     {
         InitializeComponent();
@@ -103,16 +115,62 @@ public sealed partial class SettingsWindow : Window
     }
 
     private void OnGeneralGroupClick(object sender, RoutedEventArgs e)
-        => ToggleGroup(GeneralChildren, GeneralChevron);
+    {
+        if (_collapsed) return; // 收起态下不展开二级菜单
+        _generalExpanded = !_generalExpanded;
+        ApplySidebarState();
+    }
 
     private void OnToolsGroupClick(object sender, RoutedEventArgs e)
-        => ToggleGroup(ToolsChildren, ToolsChevron);
-
-    private static void ToggleGroup(StackPanel children, FontIcon chevron)
     {
-        var expand = children.Visibility != Visibility.Visible;
-        children.Visibility = expand ? Visibility.Visible : Visibility.Collapsed;
-        chevron.Glyph = expand ? "\uE70D" : "\uE70E";
+        if (_collapsed) return;
+        _toolsExpanded = !_toolsExpanded;
+        ApplySidebarState();
+    }
+
+    /// <summary>汉堡键：收起/展开侧边栏。收起后仅显示一级菜单图标列。</summary>
+    private void OnCollapseToggleClick(object sender, RoutedEventArgs e)
+    {
+        _collapsed = !_collapsed;
+        ApplySidebarState();
+    }
+
+    private void ApplySidebarState()
+    {
+        SidebarColumn.Width = new GridLength(_collapsed ? 52 : 208);
+        HeaderBar.Margin = _collapsed ? HeaderMarginCollapsed : HeaderMarginExpanded;
+
+        var textVisibility = _collapsed ? Visibility.Collapsed : Visibility.Visible;
+        SettingsTitle.Visibility = textVisibility;
+        AboutText.Visibility = textVisibility;
+        HomeText.Visibility = textVisibility;
+        GeneralText.Visibility = textVisibility;
+        ToolsText.Visibility = textVisibility;
+        DebugText.Visibility = textVisibility;
+        ExitText.Visibility = textVisibility;
+        GeneralChevron.Visibility = textVisibility;
+        ToolsChevron.Visibility = textVisibility;
+
+        GeneralChildren.Visibility = !_collapsed && _generalExpanded ? Visibility.Visible : Visibility.Collapsed;
+        ToolsChildren.Visibility = !_collapsed && _toolsExpanded ? Visibility.Visible : Visibility.Collapsed;
+        GeneralChevron.Glyph = _generalExpanded ? "\uE70D" : "\uE70E";
+        ToolsChevron.Glyph = _toolsExpanded ? "\uE70D" : "\uE70E";
+
+        var iconMargin = _collapsed ? IconMarginCollapsed : IconMarginExpanded;
+        AboutIcon.Margin = iconMargin;
+        HomeIcon.Margin = iconMargin;
+        GeneralIcon.Margin = iconMargin;
+        ToolsIcon.Margin = iconMargin;
+        DebugIcon.Margin = iconMargin;
+
+        var padding = _collapsed ? NavPaddingCollapsed : NavPadding;
+        NavAbout.Padding = padding;
+        NavHome.Padding = padding;
+        NavGeneral.Padding = padding;
+        NavTools.Padding = padding;
+        NavDebug.Padding = padding;
+        ExitButton.Padding = padding;
+        ExitIcon.Margin = _collapsed ? new Thickness(11, 0, 0, 0) : new Thickness(0);
     }
 
     private void LoadCrashBehavior()
@@ -148,4 +206,64 @@ public sealed partial class SettingsWindow : Window
         // 结束整个 ClassDock 进程（含白条、面板等所有窗口）
         Environment.Exit(0);
     }
+
+    // ---------- 第三方库滑出面板 ----------
+
+    private bool _librariesOpen;
+
+    /// <summary>点击侧边栏“第三方库”：滑出面板。</summary>
+    private void OnLibrariesClick(object sender, RoutedEventArgs e)
+    {
+        if (_librariesOpen) return;
+        _librariesOpen = true;
+
+        LibrariesPanel.Visibility = Visibility.Visible;
+        LibrariesBackdrop.Visibility = Visibility.Visible;
+
+        AnimatePanelX(from: 320, to: 0, ms: 220, completed: null);
+    }
+
+    /// <summary>点击面板右上角关闭或遮罩：收起面板。</summary>
+    private void CloseLibrariesPanel()
+    {
+        if (!_librariesOpen) return;
+        _librariesOpen = false;
+
+        AnimatePanelX(from: 0, to: 320, ms: 200, completed: () =>
+        {
+            LibrariesPanel.Visibility = Visibility.Collapsed;
+            LibrariesBackdrop.Visibility = Visibility.Collapsed;
+        });
+    }
+
+    private void AnimatePanelX(double from, double to, double ms, Action? completed)
+    {
+        var anim = new Microsoft.UI.Xaml.Media.Animation.DoubleAnimation
+        {
+            From = from,
+            To = to,
+            Duration = TimeSpan.FromMilliseconds(ms),
+            EasingFunction = new Microsoft.UI.Xaml.Media.Animation.CubicEase
+            {
+                EasingMode = to > from
+                    ? Microsoft.UI.Xaml.Media.Animation.EasingMode.EaseIn
+                    : Microsoft.UI.Xaml.Media.Animation.EasingMode.EaseOut
+            }
+        };
+        Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTarget(anim, LibrariesPanelTransform);
+        Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTargetProperty(anim, "X");
+
+        var sb = new Microsoft.UI.Xaml.Media.Animation.Storyboard();
+        sb.Children.Add(anim);
+        if (completed is not null)
+        {
+            sb.Completed += (_, _) => completed();
+        }
+        sb.Begin();
+    }
+
+    private void OnLibrariesCloseClick(object sender, RoutedEventArgs e) => CloseLibrariesPanel();
+
+    private void OnLibrariesBackdropTapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
+        => CloseLibrariesPanel();
 }
