@@ -7,6 +7,27 @@
     <!-- 标题栏与三个窗口按键合并：第 0 行为拖拽区（右端只放版本号） -->
     <Grid x:Name="Root" Background="#FFF9F9F9" RowDefinitions="48,*">
 
+        <Grid.Resources>
+            <!-- 侧边栏一级条目：20 图标 + 文字，选中态由代码着色 -->
+            <Style x:Key="NavItemStyle" TargetType="Button">
+                <Setter Property="HorizontalAlignment" Value="Stretch" />
+                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                <Setter Property="Height" Value="40" />
+                <Setter Property="Padding" Value="8,0,8,0" />
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="CornerRadius" Value="6" />
+                <Setter Property="Foreground" Value="#FF2B2B2B" />
+                <Setter Property="FontSize" Value="14" />
+            </Style>
+
+            <!-- 分组内的二级条目：缩进、字号略小 -->
+            <Style x:Key="NavSubItemStyle" TargetType="Button" BasedOn="{StaticResource NavItemStyle}">
+                <Setter Property="Height" Value="36" />
+                <Setter Property="FontSize" Value="13" />
+            </Style>
+        </Grid.Resources>
+
         <!-- 自绘标题栏拖拽区；右侧留出 3 个系统按键（约 46px×3）的位置 -->
         <Grid x:Name="AppTitleBar" Grid.Row="0" Background="Transparent">
             <TextBlock
@@ -18,136 +39,513 @@
                 Text="0.0.1.0 (Codename In The Making)" />
         </Grid>
 
-        <Grid Grid.Row="1">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="180" />
-                <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
+        <Grid Grid.Row="1" ColumnDefinitions="208,*">
 
             <!-- 左侧导航 -->
             <Border
                 Grid.Column="0"
                 Background="#FFF3F3F3"
                 BorderBrush="#14000000"
-                BorderThickness="0,0,1,0"
-                Padding="8,12,8,12">
-                <StackPanel Spacing="4">
-                    <TextBlock
-                        Margin="8,0,0,12"
-                        FontSize="20"
-                        FontWeight="SemiBold"
-                        Text="设置" />
+                BorderThickness="0,0,1,0">
+                <Grid Padding="8,8,8,10" RowDefinitions="*,Auto">
+
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Spacing="2">
+
+                            <Grid Margin="10,2,0,12" ColumnDefinitions="Auto,*">
+                                <FontIcon
+                                    VerticalAlignment="Center"
+                                    FontSize="18"
+                                    Foreground="#FF2B2B2B"
+                                    Glyph="&#xE700;" />
+                                <TextBlock
+                                    Grid.Column="1"
+                                    Margin="12,0,0,0"
+                                    VerticalAlignment="Center"
+                                    FontSize="18"
+                                    FontWeight="SemiBold"
+                                    Text="设置" />
+                            </Grid>
+
+                            <!-- 关于 ClassDock（唯一有内容的页面之一） -->
+                            <Button
+                                x:Name="NavAbout"
+                                Style="{StaticResource NavItemStyle}"
+                                Tag="about"
+                                Click="OnNavClick">
+                                <Grid ColumnDefinitions="3,Auto,*">
+                                    <Border
+                                        x:Name="AboutAccent"
+                                        Width="3"
+                                        Margin="0,5,0,5"
+                                        Background="Transparent"
+                                        CornerRadius="1.5" />
+                                    <Viewbox Grid.Column="1" Width="20" Height="20" Margin="7,0,0,0">
+                                        <Path
+                                            Width="20"
+                                            Height="20"
+                                            Data="M10.492 8.91A.5.5 0 0 0 9.5 9v4.502l.008.09a.5.5 0 0 0 .992-.09V9zM10.799 6.75a.75.75 0 1 0-1.5 0a.75.75 0 0 0 1.5 0M18 10a8 8 0 1 0-16 0a8 8 0 0 0 16 0M3 10a7 7 0 1 1 14 0a7 7 0 0 1-14 0"
+                                            Fill="#FF2B2B2B"
+                                            Stretch="None" />
+                                    </Viewbox>
+                                    <TextBlock
+                                        Grid.Column="2"
+                                        Margin="12,0,0,0"
+                                        VerticalAlignment="Center"
+                                        Text="关于 ClassDock" />
+                                </Grid>
+                            </Button>
+
+                            <!-- 主页 -->
+                            <Button
+                                x:Name="NavHome"
+                                Style="{StaticResource NavItemStyle}"
+                                Tag="blank"
+                                Click="OnNavClick">
+                                <Grid ColumnDefinitions="3,Auto,*">
+                                    <Border
+                                        x:Name="HomeAccent"
+                                        Width="3"
+                                        Margin="0,5,0,5"
+                                        Background="Transparent"
+                                        CornerRadius="1.5" />
+                                    <Viewbox Grid.Column="1" Width="20" Height="20" Margin="7,0,0,0">
+                                        <Path
+                                            Width="20"
+                                            Height="20"
+                                            Data="M8.998 2.388a1.5 1.5 0 0 1 2.005 0l5.5 4.942A1.5 1.5 0 0 1 17 8.445V15.5a1.5 1.5 0 0 1-1.5 1.5H13a1.5 1.5 0 0 1-1.5-1.5V12a.5.5 0 0 0-.5-.5H9a.5.5 0 0 0-.5.5v3.5A1.5 1.5 0 0 1 7 17H4.5A1.5 1.5 0 0 1 3 15.5V8.445c0-.425.18-.83.498-1.115zM10.334 3.132a.5.5 0 0 0-.668 0l-5.5 4.942A.5.5 0 0 0 4 8.445V15.5a.5.5 0 0 0 .5.5H7a.5.5 0 0 0 .5-.5V12A1.5 1.5 0 0 1 9 10.5h2a1.5 1.5 0 0 1 1.5 1.5v3.5a.5.5 0 0 0 .5.5h2.5a.5.5 0 0 0 .5-.5V8.445a.5.5 0 0 0-.166-.371z"
+                                            Fill="#FF2B2B2B"
+                                            Stretch="None" />
+                                    </Viewbox>
+                                    <TextBlock
+                                        Grid.Column="2"
+                                        Margin="12,0,0,0"
+                                        VerticalAlignment="Center"
+                                        Text="主页" />
+                                </Grid>
+                            </Button>
+
+                            <!-- 通用（分组，可折叠） -->
+                            <Button
+                                x:Name="NavGeneral"
+                                Style="{StaticResource NavItemStyle}"
+                                Click="OnGeneralGroupClick">
+                                <Grid ColumnDefinitions="3,Auto,*,Auto">
+                                    <Viewbox Grid.Column="1" Width="20" Height="20" Margin="7,0,0,0">
+                                        <Path
+                                            Width="20"
+                                            Height="20"
+                                            Data="M1.911 7.383a8.5 8.5 0 0 1 1.78-3.08a.5.5 0 0 1 .54-.135l1.918.686a1 1 0 0 0 1.32-.762l.366-2.006a.5.5 0 0 1 .388-.4a8.5 8.5 0 0 1 3.554 0a.5.5 0 0 1 .388.4l.366 2.006a1 1 0 0 0 1.32.762l1.919-.686a.5.5 0 0 1 .54.136a8.5 8.5 0 0 1 1.78 3.079a.5.5 0 0 1-.153.535l-1.555 1.32a1 1 0 0 0 0 1.524l1.555 1.32a.5.5 0 0 1 .152.535a8.5 8.5 0 0 1-1.78 3.08a.5.5 0 0 1-.54.135l-1.918-.686a1 1 0 0 0-1.32.762l-.366 2.007a.5.5 0 0 1-.388.399a8.5 8.5 0 0 1-3.554 0a.5.5 0 0 1-.388-.4l-.366-2.006a1 1 0 0 0-1.32-.762l-1.918.686a.5.5 0 0 1-.54-.136a8.5 8.5 0 0 1-1.78-3.079a.5.5 0 0 1 .152-.535l1.555-1.32a1 1 0 0 0 0-1.524l-1.555-1.32a.5.5 0 0 1-.152-.535m1.06-.006l1.294 1.098a2 2 0 0 1 0 3.05l-1.293 1.098c.292.782.713 1.51 1.244 2.152l1.596-.57q.155-.055.315-.085a2 2 0 0 1 2.326 1.609l.304 1.669a7.6 7.6 0 0 0 2.486 0l.304-1.67a1.998 1.998 0 0 1 2.641-1.524l1.596.571a7.5 7.5 0 0 0 1.245-2.152l-1.294-1.098a1.998 1.998 0 0 1 0-3.05l1.294-1.098a7.5 7.5 0 0 0-1.245-2.152l-1.596.57a2 2 0 0 1-2.64-1.524l-.305-1.669a7.6 7.6 0 0 0-2.486 0l-.304 1.669a2 2 0 0 1-2.64 1.525l-1.597-.571a7.5 7.5 0 0 0-1.244 2.152M7.502 10a2.5 2.5 0 1 1 5 0a2.5 2.5 0 0 1-5 0m1 0a1.5 1.5 0 1 0 3 0a1.5 1.5 0 0 0-3 0"
+                                            Fill="#FF2B2B2B"
+                                            Stretch="None" />
+                                    </Viewbox>
+                                    <TextBlock
+                                        Grid.Column="2"
+                                        Margin="12,0,0,0"
+                                        VerticalAlignment="Center"
+                                        Text="通用" />
+                                    <FontIcon
+                                        x:Name="GeneralChevron"
+                                        Grid.Column="3"
+                                        VerticalAlignment="Center"
+                                        FontSize="10"
+                                        Foreground="#99000000"
+                                        Glyph="&#xE70D;" />
+                                </Grid>
+                            </Button>
+
+                            <StackPanel
+                                x:Name="GeneralChildren"
+                                Margin="26,0,0,0"
+                                Spacing="2">
+                                <Button Style="{StaticResource NavSubItemStyle}" Tag="blank" Click="OnNavClick">
+                                    <Grid ColumnDefinitions="Auto,*">
+                                        <Viewbox Width="20" Height="20">
+                                            <Path
+                                                Width="20"
+                                                Height="20"
+                                                Data="M1.911 7.383a8.5 8.5 0 0 1 1.78-3.08a.5.5 0 0 1 .54-.135l1.918.686a1 1 0 0 0 1.32-.762l.366-2.006a.5.5 0 0 1 .388-.4a8.5 8.5 0 0 1 3.554 0a.5.5 0 0 1 .388.4l.366 2.006a1 1 0 0 0 1.32.762l1.919-.686a.5.5 0 0 1 .54.136a8.5 8.5 0 0 1 1.78 3.079a.5.5 0 0 1-.153.535l-1.555 1.32a1 1 0 0 0 0 1.524l1.555 1.32a.5.5 0 0 1 .152.535a8.5 8.5 0 0 1-1.78 3.08a.5.5 0 0 1-.54.135l-1.918-.686a1 1 0 0 0-1.32.762l-.366 2.007a.5.5 0 0 1-.388.399a8.5 8.5 0 0 1-3.554 0a.5.5 0 0 1-.388-.4l-.366-2.006a1 1 0 0 0-1.32-.762l-1.918.686a.5.5 0 0 1-.54-.136a8.5 8.5 0 0 1-1.78-3.079a.5.5 0 0 1 .152-.535l1.555-1.32a1 1 0 0 0 0-1.524l-1.555-1.32a.5.5 0 0 1-.152-.535m1.06-.006l1.294 1.098a2 2 0 0 1 0 3.05l-1.293 1.098c.292.782.713 1.51 1.244 2.152l1.596-.57q.155-.055.315-.085a2 2 0 0 1 2.326 1.609l.304 1.669a7.6 7.6 0 0 0 2.486 0l.304-1.67a1.998 1.998 0 0 1 2.641-1.524l1.596.571a7.5 7.5 0 0 0 1.245-2.152l-1.294-1.098a1.998 1.998 0 0 1 0-3.05l1.294-1.098a7.5 7.5 0 0 0-1.245-2.152l-1.596.57a2 2 0 0 1-2.64-1.524l-.305-1.669a7.6 7.6 0 0 0-2.486 0l-.304 1.669a2 2 0 0 1-2.64 1.525l-1.597-.571a7.5 7.5 0 0 0-1.244 2.152M7.502 10a2.5 2.5 0 1 1 5 0a2.5 2.5 0 0 1-5 0m1 0a1.5 1.5 0 1 0 3 0a1.5 1.5 0 0 0-3 0"
+                                                Fill="#FF2B2B2B"
+                                                Stretch="None" />
+                                        </Viewbox>
+                                        <TextBlock
+                                            Grid.Column="1"
+                                            Margin="12,0,0,0"
+                                            VerticalAlignment="Center"
+                                            Text="基本" />
+                                    </Grid>
+                                </Button>
+                                <Button Style="{StaticResource NavSubItemStyle}" Tag="blank" Click="OnNavClick">
+                                    <Grid ColumnDefinitions="Auto,*">
+                                        <Viewbox Width="20" Height="20">
+                                            <Path
+                                                Width="20"
+                                                Height="20"
+                                                Data="M10 2a8 8 0 0 1 3.388 15.249a3.77 3.77 0 0 1-3.291-.059c-.974-.503-1.696-1.467-1.648-2.731c.017-.445.082-.867.143-1.243c.063-.387.118-.712.136-1.015c.018-.297-.004-.533-.078-.732c-.07-.191-.2-.381-.45-.569c-.313-.235-.58-.275-.845-.237c-.3.043-.614.188-1.014.387c-.735.365-1.776.942-2.974.332c-1.102-.562-1.424-1.868-1.22-2.917A8 8 0 0 1 10 2m0 1a7 7 0 0 0-6.871 5.655c-.153.788.126 1.547.691 1.835c.684.348 1.251.074 2.076-.336c.38-.188.834-.412 1.318-.481c.52-.075 1.054.028 1.586.427c.39.292.645.634.788 1.021c.14.379.162.768.14 1.14c-.022.366-.09.753-.149 1.116a9 9 0 0 0-.13 1.12c-.032.812.418 1.448 1.108 1.805a2.77 2.77 0 0 0 2.407.042A7.002 7.002 0 0 0 10 3m2.5 10a1 1 0 1 1 0 2a1 1 0 0 1 0-2m2-2.5a1 1 0 1 1 0 2a1 1 0 0 1 0-2m0-3a1 1 0 1 1 0 2a1 1 0 0 1 0-2m-2-2.5a1 1 0 1 1 0 2a1 1 0 0 1 0-2m-3-.5a1 1 0 1 1 0 2a1 1 0 0 1 0-2"
+                                                Fill="#FF2B2B2B"
+                                                Stretch="None" />
+                                        </Viewbox>
+                                        <TextBlock
+                                            Grid.Column="1"
+                                            Margin="12,0,0,0"
+                                            VerticalAlignment="Center"
+                                            Text="外观与动画" />
+                                    </Grid>
+                                </Button>
+                                <Button Style="{StaticResource NavSubItemStyle}" Tag="blank" Click="OnNavClick">
+                                    <Grid ColumnDefinitions="Auto,*">
+                                        <Viewbox Width="20" Height="20">
+                                            <Path
+                                                Width="20"
+                                                Height="20"
+                                                Data="M8.5 10a.5.5 0 0 0 0 1h3a.5.5 0 0 0 0-1zM2 4.75C2 3.784 2.784 3 3.75 3h12.5c.966 0 1.75.784 1.75 1.75v1.5c0 .698-.409 1.3-1 1.582V14a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V7.832A1.75 1.75 0 0 1 2 6.25zM3.75 4a.75.75 0 0 0-.75.75v1.5c0 .414.336.75.75.75h12.5a.75.75 0 0 0 .75-.75v-1.5a.75.75 0 0 0-.75-.75zM4 8v6a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V8z"
+                                                Fill="#FF2B2B2B"
+                                                Stretch="None" />
+                                        </Viewbox>
+                                        <TextBlock
+                                            Grid.Column="1"
+                                            Margin="12,0,0,0"
+                                            VerticalAlignment="Center"
+                                            Text="配置与存储" />
+                                    </Grid>
+                                </Button>
+                                <Button Style="{StaticResource NavSubItemStyle}" Tag="blank" Click="OnNavClick">
+                                    <Grid ColumnDefinitions="Auto,*">
+                                        <Viewbox Width="20" Height="20">
+                                            <Path
+                                                Width="20"
+                                                Height="20"
+                                                Data="M9.723 2.084a.5.5 0 0 1 .554 0a15.05 15.05 0 0 0 6.294 2.421A.5.5 0 0 1 17 5v4.5c0 3.891-2.307 6.73-6.82 8.467a.5.5 0 0 1-.36 0C5.308 16.23 3 13.39 3 9.5V5a.5.5 0 0 1 .43-.495a15.05 15.05 0 0 0 6.293-2.421m-.124 1.262A16 16 0 0 1 4 5.428V9.5c0 3.392 1.968 5.863 6 7.463c4.032-1.6 6-4.071 6-7.463V5.428a16 16 0 0 1-5.6-2.082l-.4-.249z"
+                                                Fill="#FF2B2B2B"
+                                                Stretch="None" />
+                                        </Viewbox>
+                                        <TextBlock
+                                            Grid.Column="1"
+                                            Margin="12,0,0,0"
+                                            VerticalAlignment="Center"
+                                            Text="安全设置" />
+                                    </Grid>
+                                </Button>
+                                <Button Style="{StaticResource NavSubItemStyle}" Tag="blank" Click="OnNavClick">
+                                    <Grid ColumnDefinitions="Auto,*">
+                                        <Viewbox Width="20" Height="20">
+                                            <Path
+                                                Width="20"
+                                                Height="20"
+                                                Data="M5 12.5a.5.5 0 0 1 .5-.5h9a.5.5 0 0 1 0 1h-9a.5.5 0 0 1-.5-.5m6.502-4.495a.752.752 0 1 0 0-1.505a.752.752 0 0 0 0 1.505m3.753-.753a.752.752 0 1 1-1.505 0a.752.752 0 0 1 1.505 0m-9.753.753a.752.752 0 1 0 0-1.505a.752.752 0 0 0 0 1.505M7.75 9.752a.752.752 0 1 1-1.505 0a.752.752 0 0 1 1.505 0m2.252.753a.752.752 0 1 0 0-1.505a.752.752 0 0 0 0 1.505m3.757-.753a.752.752 0 1 1-1.504 0a.752.752 0 0 1 1.504 0M8.503 8.005a.752.752 0 1 0 0-1.505a.752.752 0 0 0 0 1.505M2 5.5A1.5 1.5 0 0 1 3.5 4h13A1.5 1.5 0 0 1 18 5.5v8a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 2 13.5zM3.5 5a.5.5 0 0 0-.5.5v8a.5.5 0 0 0 .5.5h13a.5.5 0 0 0 .5-.5v-8a.5.5 0 0 0-.5-.5z"
+                                                Fill="#FF2B2B2B"
+                                                Stretch="None" />
+                                        </Viewbox>
+                                        <TextBlock
+                                            Grid.Column="1"
+                                            Margin="12,0,0,0"
+                                            VerticalAlignment="Center"
+                                            Text="快捷键" />
+                                    </Grid>
+                                </Button>
+                            </StackPanel>
+
+                            <!-- 小工具（分组，可折叠） -->
+                            <Button
+                                x:Name="NavTools"
+                                Style="{StaticResource NavItemStyle}"
+                                Click="OnToolsGroupClick">
+                                <Grid ColumnDefinitions="3,Auto,*,Auto">
+                                    <Viewbox Grid.Column="1" Width="20" Height="20" Margin="7,0,0,0">
+                                        <Path
+                                            Width="20"
+                                            Height="20"
+                                            Data="M6 4.5V6H4a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h12.003a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2H14V4.5A1.5 1.5 0 0 0 12.5 3h-5A1.5 1.5 0 0 0 6 4.5M7.5 4h5a.5.5 0 0 1 .5.5V6H7V4.5a.5.5 0 0 1 .5-.5M4 7h12.003a1 1 0 0 1 1 1v2H14v-.5a.5.5 0 0 0-1 0v.5H7v-.5a.5.5 0 0 0-1 0v.5H3V8a1 1 0 0 1 1-1m9 4v.5a.5.5 0 0 0 1 0V11h3.003v4a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-4h3v.5a.5.5 0 0 0 1 0V11z"
+                                            Fill="#FF2B2B2B"
+                                            Stretch="None" />
+                                    </Viewbox>
+                                    <TextBlock
+                                        Grid.Column="2"
+                                        Margin="12,0,0,0"
+                                        VerticalAlignment="Center"
+                                        Text="小工具" />
+                                    <FontIcon
+                                        x:Name="ToolsChevron"
+                                        Grid.Column="3"
+                                        VerticalAlignment="Center"
+                                        FontSize="10"
+                                        Foreground="#99000000"
+                                        Glyph="&#xE70D;" />
+                                </Grid>
+                            </Button>
+
+                            <StackPanel
+                                x:Name="ToolsChildren"
+                                Margin="26,0,0,0"
+                                Spacing="2">
+                                <Button Style="{StaticResource NavSubItemStyle}" Tag="blank" Click="OnNavClick">
+                                    <Grid ColumnDefinitions="Auto,*">
+                                        <Viewbox Width="20" Height="20">
+                                            <Path
+                                                Width="20"
+                                                Height="20"
+                                                Data="M4.878.282l.348 1.071A2.2 2.2 0 0 0 6.624 2.75l1.072.348l.022.006a.423.423 0 0 1 0 .798l-1.072.348a2.2 2.2 0 0 0-1.399 1.397L4.9 6.717a.423.423 0 0 1-.798 0l-.348-1.07a2.2 2.2 0 0 0-1.399-1.403l-1.072-.348a.423.423 0 0 1 0-.798l1.072-.348a2.2 2.2 0 0 0 1.377-1.397L4.08.283a.423.423 0 0 1 .799 0M9.784 8.214l-.766-.248a1.58 1.58 0 0 1-.998-.999l-.25-.764a.302.302 0 0 0-.57 0l-.248.764a1.58 1.58 0 0 1-.984.999l-.765.248a.302.302 0 0 0 0 .57l.765.249a1.58 1.58 0 0 1 1 1.002l.248.764a.302.302 0 0 0 .57 0l.249-.764a1.58 1.58 0 0 1 .999-.999l.765-.248a.302.302 0 0 0 0-.57zM6.016 10.348l.207.637l-1.97 1.97a1.44 1.44 0 0 0-.386.705l-.707 3.182l3.159-.702c.282-.063.54-.205.744-.409l9.358-9.358a1.975 1.975 0 0 0-2.793-2.792L9.965 7.242l-.637-.21a.7.7 0 0 1-.23-.14a.4.4 0 0 1-.088-.11l3.91-3.91a2.975 2.975 0 0 1 4.207 4.207l-.67.67l.336.337a2 2 0 0 1 0 2.828l-.94.94a.5.5 0 0 1-.707-.708l.94-.939a1 1 0 0 0 0-1.414l-.336-.336l-7.98 7.98a2.5 2.5 0 0 1-1.235.678l-3.926.873a.5.5 0 0 1-.597-.596l.878-3.95c.1-.453.328-.867.655-1.195l2.212-2.211a.6.6 0 0 1 .258.311"
+                                                Fill="#FF2B2B2B"
+                                                Stretch="None" />
+                                        </Viewbox>
+                                        <TextBlock
+                                            Grid.Column="1"
+                                            Margin="12,0,0,0"
+                                            VerticalAlignment="Center"
+                                            Text="批注设置" />
+                                    </Grid>
+                                </Button>
+                                <Button Style="{StaticResource NavSubItemStyle}" Tag="blank" Click="OnNavClick">
+                                    <Grid ColumnDefinitions="Auto,*">
+                                        <Viewbox Width="20" Height="20">
+                                            <Path
+                                                Width="20"
+                                                Height="20"
+                                                Data="M7.5 2a.5.5 0 0 0 0 1h4a.5.5 0 0 0 0-1zM15.156 3.929a.5.5 0 1 0-.707.707l1.414 1.414a.5.5 0 1 0 .707-.707zM9.5 6a.5.5 0 0 0-.5.5v5a.5.5 0 0 0 1 0v-5a.5.5 0 0 0-.5-.5m0 12a7 7 0 1 0 0-14a7 7 0 0 0 0 14m0-1a6 6 0 1 1 0-12a6 6 0 0 1 0 12"
+                                                Fill="#FF2B2B2B"
+                                                Stretch="None" />
+                                        </Viewbox>
+                                        <TextBlock
+                                            Grid.Column="1"
+                                            Margin="12,0,0,0"
+                                            VerticalAlignment="Center"
+                                            Text="计时器/倒计时" />
+                                    </Grid>
+                                </Button>
+                                <Button Style="{StaticResource NavSubItemStyle}" Tag="blank" Click="OnNavClick">
+                                    <Grid ColumnDefinitions="Auto,*">
+                                        <Viewbox Width="20" Height="20">
+                                            <Path
+                                                Width="20"
+                                                Height="20"
+                                                Data="M1 8a4 4 0 0 1 4-4h6a4 4 0 0 1 0 8H9.75a.75.75 0 0 1 0-1.5H11a2.5 2.5 0 0 0 0-5H5a2.5 2.5 0 0 0-.735 4.89c-.16.468-.25.966-.263 1.484A4 4 0 0 1 1 8M15.998 8.126a5 5 0 0 1-.263 1.484A2.501 2.501 0 0 1 15 14.5H9a2.5 2.5 0 0 1 0-5h1.25a.75.75 0 0 0 0-1.5H9a4 4 0 1 0 0 8h6a4 4 0 0 0 .998-7.874"
+                                                Fill="#FF2B2B2B"
+                                                Stretch="None" />
+                                        </Viewbox>
+                                        <TextBlock
+                                            Grid.Column="1"
+                                            Margin="12,0,0,0"
+                                            VerticalAlignment="Center"
+                                            Text="联动设置" />
+                                    </Grid>
+                                </Button>
+                            </StackPanel>
+
+                            <!-- 调试（唯一有内容的页面之二） -->
+                            <Button
+                                x:Name="NavDebug"
+                                Style="{StaticResource NavItemStyle}"
+                                Tag="debug"
+                                Click="OnNavClick">
+                                <Grid ColumnDefinitions="3,Auto,*">
+                                    <Border
+                                        x:Name="DebugAccent"
+                                        Width="3"
+                                        Margin="0,5,0,5"
+                                        Background="Transparent"
+                                        CornerRadius="1.5" />
+                                    <Viewbox Grid.Column="1" Width="20" Height="20" Margin="7,0,0,0">
+                                        <Path
+                                            Width="20"
+                                            Height="20"
+                                            Data="M17 15.555V10.5a.6.6 0 0 0-.07-.273a.37.37 0 0 0-.172-.149a1 1 0 0 0-.235-.062a2 2 0 0 0-.257-.016H16V5.117q.047-.101.133-.242t.164-.312q.078-.173.14-.32A.7.7 0 0 0 16.5 4a2 2 0 0 0-.07-.32a7 7 0 0 0-.157-.493l-.18-.5a6 6 0 0 1-.116-.343a.57.57 0 0 0-.188-.25A.47.47 0 0 0 15.5 2h-2a.55.55 0 0 0-.297.102a.46.46 0 0 0-.18.242q-.039.117-.125.351a14 14 0 0 0-.171.5q-.087.265-.157.493q-.07.226-.07.312q0 .11.063.25q.061.14.148.313a17 17 0 0 0 .289.554V10h-.266q-.14 0-.265.016a.7.7 0 0 0-.235.07a.44.44 0 0 0-.171.148a.5.5 0 0 0-.063.266v5.055q0 .507.203.953t.547.781A2.5 2.5 0 0 0 14.5 18q.5 0 .953-.195a2.7 2.7 0 0 0 .797-.524q.345-.327.547-.773a2.3 2.3 0 0 0 .203-.953M15 10h-1V5a.5.5 0 0 0-.055-.227l-.406-.812l.32-.961h1.282l.32.96l-.406.813A.5.5 0 0 0 15 5zm-2 2v-1h3v1zm3 1v2.5q.008.297-.117.578a1.6 1.6 0 0 1-.328.485A1.5 1.5 0 0 1 14.5 17a1.3 1.3 0 0 1-.578-.117A1.5 1.5 0 0 1 13 15.5V13zM6 2.542a.5.5 0 0 0-.688-.464A4.501 4.501 0 0 0 5 10.283V16a2 2 0 0 0 4 0v-5.716a4.5 4.5 0 0 0-.312-8.205a.5.5 0 0 0-.688.464V6a1 1 0 1 1-2 0zm-2.5 3.71c0-1.19.593-2.24 1.5-2.874v2.62a2 2 0 1 0 4 0v-2.62a3.501 3.501 0 0 1-.688 6.119A.5.5 0 0 0 8 9.96V16a1 1 0 1 1-2 0V9.96a.5.5 0 0 0-.312-.463A3.5 3.5 0 0 1 3.5 6.25"
+                                            Fill="#FF2B2B2B"
+                                            Stretch="None" />
+                                    </Viewbox>
+                                    <TextBlock
+                                        Grid.Column="2"
+                                        Margin="12,0,0,0"
+                                        VerticalAlignment="Center"
+                                        Text="测试与调试" />
+                                </Grid>
+                            </Button>
+
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <!-- 底部：关闭软件 -->
                     <Button
-                        x:Name="NavAbout"
+                        Grid.Row="1"
+                        Height="40"
+                        Margin="0,8,0,0"
+                        Padding="8,0,8,0"
                         HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Left"
-                        Background="#19000000"
-                        BorderThickness="0"
-                        CornerRadius="4"
-                        Content="关于"
-                        Click="OnNavAboutClick" />
-                    <Button
-                        x:Name="NavExit"
-                        HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Left"
-                        Foreground="#FFC42B1C"
+                        HorizontalContentAlignment="Stretch"
                         Background="Transparent"
                         BorderThickness="0"
-                        CornerRadius="4"
-                        Content="关闭"
-                        Click="OnNavExitClick" />
-                </StackPanel>
-            </Border>
-
-            <!-- 右侧内容：关于 -->
-            <ScrollViewer Grid.Column="1">
-                <StackPanel Padding="24,20,24,24" Spacing="16">
-
-                    <!-- 封面图 -->
-                    <Border CornerRadius="8">
-                        <Image
-                            Source="Assets/Title.png"
-                            Stretch="UniformToFill" />
-                    </Border>
-
-                    <TextBlock
-                        FontSize="24"
-                        FontWeight="SemiBold"
-                        Text="关于 ClassDock" />
-
-                    <!-- 版本信息卡片 -->
-                    <Border
-                        Background="#FFFFFFFF"
-                        BorderBrush="#14000000"
-                        BorderThickness="1"
-                        CornerRadius="8"
-                        Padding="16,14,16,14">
-                        <Grid ColumnDefinitions="Auto,*,Auto">
+                        CornerRadius="6"
+                        Foreground="#FFC42B1C"
+                        FontSize="14"
+                        Click="OnNavExitClick">
+                        <Grid ColumnDefinitions="Auto,*">
                             <FontIcon
-                                Grid.Column="0"
-                                Margin="0,0,12,0"
-                                FontFamily="Segoe Fluent Icons,Segoe MDL2 Assets"
-                                FontSize="20"
-                                Glyph="&#xE7F8;" />
-                            <TextBlock
-                                Grid.Column="1"
                                 VerticalAlignment="Center"
                                 FontSize="14"
-                                FontWeight="SemiBold"
-                                Text="ClassDock" />
+                                Foreground="#FFC42B1C"
+                                Glyph="&#xE711;" />
                             <TextBlock
-                                Grid.Column="2"
-                                VerticalAlignment="Center"
-                                FontSize="13"
-                                Foreground="#66000000"
-                                Text="0.0.1.0 (Codename In The Making)" />
-                        </Grid>
-                    </Border>
-
-                    <!-- 版权卡片 -->
-                    <Border
-                        Background="#FFFFFFFF"
-                        BorderBrush="#14000000"
-                        BorderThickness="1"
-                        CornerRadius="8"
-                        Padding="16,14,16,14">
-                        <StackPanel Spacing="4">
-                            <TextBlock FontSize="13" Text="Copyright (c) 2026 Xingmo" />
-                            <TextBlock
-                                FontSize="12"
-                                Foreground="#66000000"
-                                Text="本项目基于 GNU General Public License v3.0 获得许可。" />
-                        </StackPanel>
-                    </Border>
-
-                    <!-- 常用链接卡片 -->
-                    <Border
-                        Background="#FFFFFFFF"
-                        BorderBrush="#14000000"
-                        BorderThickness="1"
-                        CornerRadius="8"
-                        Padding="16,14,16,14">
-                        <Grid ColumnDefinitions="*,Auto">
-                            <TextBlock
-                                Grid.Column="0"
-                                VerticalAlignment="Center"
-                                FontSize="13"
-                                FontWeight="SemiBold"
-                                Text="常用链接" />
-                            <StackPanel
                                 Grid.Column="1"
-                                Orientation="Horizontal"
-                                Spacing="12">
-                                <HyperlinkButton
-                                    Content="项目主页"
-                                    FontSize="13"
-                                    NavigateUri="https://github.com/XingmoStudio/ClassDock" />
-                            </StackPanel>
+                                Margin="12,0,0,0"
+                                VerticalAlignment="Center"
+                                Text="关闭软件" />
                         </Grid>
-                    </Border>
+                    </Button>
+                </Grid>
+            </Border>
 
-                </StackPanel>
-            </ScrollViewer>
+            <!-- 右侧内容 -->
+            <Grid Grid.Column="1">
+
+                <!-- 关于 ClassDock -->
+                <ScrollViewer x:Name="AboutPage" Visibility="Visible">
+                    <StackPanel Padding="28,12,28,28" Spacing="16">
+
+                        <Border
+                            Height="180"
+                            Background="#FFEFEFF1"
+                            CornerRadius="8">
+                            <Image Source="Assets/Title.png" Stretch="UniformToFill" />
+                        </Border>
+
+                        <TextBlock
+                            FontSize="22"
+                            FontWeight="SemiBold"
+                            Text="关于 ClassDock" />
+
+                        <!-- 版本信息卡片 -->
+                        <Border
+                            Background="#FFFFFFFF"
+                            BorderBrush="#14000000"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="16,14,16,14">
+                            <Grid ColumnDefinitions="Auto,*,Auto">
+                                <FontIcon
+                                    Grid.Column="0"
+                                    Margin="0,0,12,0"
+                                    FontFamily="Segoe Fluent Icons,Segoe MDL2 Assets"
+                                    FontSize="20"
+                                    Glyph="&#xE7F8;" />
+                                <TextBlock
+                                    Grid.Column="1"
+                                    VerticalAlignment="Center"
+                                    FontSize="14"
+                                    FontWeight="SemiBold"
+                                    Text="ClassDock" />
+                                <TextBlock
+                                    Grid.Column="2"
+                                    VerticalAlignment="Center"
+                                    FontSize="13"
+                                    Foreground="#66000000"
+                                    Text="0.0.1.0 (Codename In The Making)" />
+                            </Grid>
+                        </Border>
+
+                        <!-- 版权卡片 -->
+                        <Border
+                            Background="#FFFFFFFF"
+                            BorderBrush="#14000000"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="16,14,16,14">
+                            <StackPanel Spacing="4">
+                                <TextBlock FontSize="13" Text="Copyright (c) 2026 Xingmo" />
+                                <TextBlock
+                                    FontSize="12"
+                                    Foreground="#66000000"
+                                    Text="本项目基于 GNU General Public License v3.0 获得许可。" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- 常用链接卡片 -->
+                        <Border
+                            Background="#FFFFFFFF"
+                            BorderBrush="#14000000"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="16,14,16,14">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock
+                                    Grid.Column="0"
+                                    VerticalAlignment="Center"
+                                    FontSize="13"
+                                    FontWeight="SemiBold"
+                                    Text="常用链接" />
+                                <StackPanel
+                                    Grid.Column="1"
+                                    Orientation="Horizontal"
+                                    Spacing="12">
+                                    <HyperlinkButton
+                                        Content="项目主页"
+                                        FontSize="13"
+                                        NavigateUri="https://github.com/XingmoStudio/ClassDock" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- 调试 -->
+                <ScrollViewer x:Name="DebugPage" Visibility="Collapsed">
+                    <StackPanel Padding="28,12,28,28" Spacing="16">
+
+                        <TextBlock
+                            FontSize="22"
+                            FontWeight="SemiBold"
+                            Text="测试与调试" />
+
+                        <TextBlock
+                            FontSize="13"
+                            Foreground="#66000000"
+                            TextWrapping="Wrap"
+                            Text="选择应用在遇到未处理异常时的处理方式。" />
+
+                        <Border
+                            Background="#FFFFFFFF"
+                            BorderBrush="#14000000"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="16,14,16,16">
+                            <StackPanel Spacing="4">
+                                <TextBlock
+                                    FontSize="14"
+                                    FontWeight="SemiBold"
+                                    Text="崩溃时的处理方式" />
+
+                                <RadioButton
+                                    x:Name="CrashSilentExit"
+                                    Margin="0,6,0,0"
+                                    Content="崩溃时静默退出"
+                                    GroupName="CrashBehavior"
+                                    Checked="OnCrashBehaviorChanged" />
+                                <RadioButton
+                                    x:Name="CrashShowError"
+                                    Content="崩溃时显示错误信息"
+                                    GroupName="CrashBehavior"
+                                    Checked="OnCrashBehaviorChanged" />
+                                <RadioButton
+                                    x:Name="CrashRestart"
+                                    Content="崩溃时静默重启"
+                                    GroupName="CrashBehavior"
+                                    Checked="OnCrashBehaviorChanged" />
+
+                                <TextBlock
+                                    Margin="0,10,0,0"
+                                    FontSize="12"
+                                    Foreground="#66000000"
+                                    TextWrapping="Wrap"
+                                    Text="静默重启会尝试重新启动 ClassDock；若启动阶段反复崩溃，会自动改为静默退出以避免重启循环。" />
+                            </StackPanel>
+                        </Border>
+
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- 未开放页面：保持空白 -->
+                <Grid x:Name="BlankPage" Visibility="Collapsed" />
+
+            </Grid>
         </Grid>
     </Grid>
 </Window>

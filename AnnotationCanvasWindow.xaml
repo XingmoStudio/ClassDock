@@ -138,10 +138,285 @@
                 <Setter Property="Foreground" Value="#FF2B2B2B" />
                 <Setter Property="Template" Value="{StaticResource ToolButtonTemplate}" />
             </Style>
+
+            <!-- 笔类型选项（文字胶囊，宽度随内容） -->
+            <Style x:Key="PenKindStyle" TargetType="ToggleButton">
+                <Setter Property="Height" Value="30" />
+                <Setter Property="Padding" Value="14,0" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="Foreground" Value="#FF2B2B2B" />
+                <Setter Property="FontSize" Value="12" />
+                <Setter Property="HorizontalAlignment" Value="Stretch" />
+                <Setter Property="Template" Value="{StaticResource ToolToggleTemplate}" />
+            </Style>
         </Grid.Resources>
 
         <Image x:Name="Snapshot" Stretch="Fill" IsHitTestVisible="False" />
         <Canvas x:Name="InkLayer" />
+
+        <!-- 画笔设置面板（浅色）：上=笔迹粗细演示曲线（悬停变滑块），
+             下=粗细档位与常用色块（最后一格彩虹圆点击展开调色盘），右侧=笔类型列表。
+             画笔已选中时再点一次画笔按钮弹出/收起 -->
+        <Border
+            x:Name="PenPanel"
+            Margin="0,0,80,0"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Center"
+            Background="#FFFFFFFF"
+            BorderBrush="#1A000000"
+            BorderThickness="1"
+            CornerRadius="12"
+            Padding="16"
+            Visibility="Collapsed"
+            PointerPressed="OnCardPressed">
+            <Grid ColumnSpacing="16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="300" />
+                    <ColumnDefinition Width="116" />
+                </Grid.ColumnDefinitions>
+
+                <!-- 左半：粗细演示 + 档位 + 色块 -->
+                <StackPanel Spacing="12">
+                    <!-- 笔迹粗细演示：悬停时曲线淡出、滑块浮现（Path 上不能写 x:Name） -->
+                    <Grid
+                        x:Name="ThicknessPreviewArea"
+                        Height="96"
+                        PointerEntered="OnPreviewAreaEntered"
+                        PointerExited="OnPreviewAreaExited">
+                        <Path
+                            Width="300"
+                            Height="96"
+                            Data="M10,68 C40,20 100,14 150,46 C190,72 240,78 290,34"
+                            Stroke="#FF3A3A3A"
+                            StrokeEndLineCap="Round"
+                            StrokeStartLineCap="Round"
+                            StrokeLineJoin="Round"
+                            Stretch="None" />
+                        <Slider
+                            x:Name="ThicknessSlider"
+                            Width="260"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            IsHitTestVisible="False"
+                            Maximum="16"
+                            Minimum="1"
+                            Opacity="0"
+                            StepFrequency="0.5"
+                            Value="3"
+                            ValueChanged="OnThicknessChanged" />
+                    </Grid>
+
+                    <!-- 粗细档位：默认几个档，点击即切换 -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock
+                            x:Name="ThicknessLabel"
+                            VerticalAlignment="Center"
+                            FontSize="13"
+                            Foreground="#FF3A3A3A"
+                            Text="粗细 3" />
+                        <StackPanel
+                            Grid.Column="1"
+                            Margin="18,0,0,0"
+                            VerticalAlignment="Center"
+                            Orientation="Horizontal"
+                            Spacing="14">
+                            <Border
+                                Width="26" Height="26"
+                                Background="Transparent"
+                                PointerPressed="OnThicknessPresetPressed"
+                                Tag="2">
+                                <Ellipse Width="4" Height="4" Fill="#FF8A8A8A" />
+                            </Border>
+                            <Border
+                                Width="26" Height="26"
+                                Background="Transparent"
+                                PointerPressed="OnThicknessPresetPressed"
+                                Tag="5">
+                                <Ellipse Width="7" Height="7" Fill="#FF8A8A8A" />
+                            </Border>
+                            <Border
+                                Width="26" Height="26"
+                                Background="Transparent"
+                                PointerPressed="OnThicknessPresetPressed"
+                                Tag="9">
+                                <Ellipse Width="10" Height="10" Fill="#FF8A8A8A" />
+                            </Border>
+                            <Border
+                                Width="26" Height="26"
+                                Background="Transparent"
+                                PointerPressed="OnThicknessPresetPressed"
+                                Tag="14">
+                                <Ellipse Width="13" Height="13" Fill="#FF8A8A8A" />
+                            </Border>
+                        </StackPanel>
+                        <Button
+                            x:Name="PinSliderButton"
+                            Grid.Column="2"
+                            Width="28"
+                            Height="28"
+                            Padding="0"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Click="OnPinSliderClick"
+                            ToolTipService.ToolTip="固定显示粗细滑块">
+                            <Viewbox Width="12" Height="12">
+                                <Path
+                                    Width="24"
+                                    Height="24"
+                                    Data="M5 15l7-7 7 7"
+                                    Fill="Transparent"
+                                    Stroke="#FF8A8A8A"
+                                    StrokeThickness="2"
+                                    Stretch="None" />
+                            </Viewbox>
+                        </Button>
+                    </Grid>
+
+                    <!-- 常用色块：6×2，最后一格为调色盘入口（点击展开 ColorPicker） -->
+                    <Grid x:Name="SwatchGrid" ColumnSpacing="8" RowSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <Border Grid.Row="0" Grid.Column="0" Width="34" Height="34" Background="#FFFFFFFF" BorderBrush="#1F000000" BorderThickness="1" CornerRadius="8" PointerPressed="OnSwatchPressed" Tag="#FFFFFFFF" />
+                        <Border Grid.Row="0" Grid.Column="1" Width="34" Height="34" Background="#FFFF8C00" BorderBrush="#1F000000" BorderThickness="1" CornerRadius="8" PointerPressed="OnSwatchPressed" Tag="#FFFF8C00" />
+                        <Border Grid.Row="0" Grid.Column="2" Width="34" Height="34" Background="#FFFFC300" BorderBrush="#1F000000" BorderThickness="1" CornerRadius="8" PointerPressed="OnSwatchPressed" Tag="#FFFFC300" />
+                        <Border Grid.Row="0" Grid.Column="3" Width="34" Height="34" Background="#FF6BB5D8" BorderBrush="#1F000000" BorderThickness="1" CornerRadius="8" PointerPressed="OnSwatchPressed" Tag="#FF6BB5D8" />
+                        <Border Grid.Row="0" Grid.Column="4" Width="34" Height="34" Background="#FF5FD35F" BorderBrush="#1F000000" BorderThickness="1" CornerRadius="8" PointerPressed="OnSwatchPressed" Tag="#FF5FD35F" />
+                        <Border Grid.Row="0" Grid.Column="5" Width="34" Height="34" Background="#FFFF4FA3" BorderBrush="#1F000000" BorderThickness="1" CornerRadius="8" PointerPressed="OnSwatchPressed" Tag="#FFFF4FA3" />
+
+                        <Border Grid.Row="1" Grid.Column="0" Width="34" Height="34" Background="#FF1A1A1A" BorderBrush="#1F000000" BorderThickness="1" CornerRadius="8" PointerPressed="OnSwatchPressed" Tag="#FF1A1A1A" />
+                        <Border Grid.Row="1" Grid.Column="1" Width="34" Height="34" Background="#FF4B3FD9" BorderBrush="#1F000000" BorderThickness="1" CornerRadius="8" PointerPressed="OnSwatchPressed" Tag="#FF4B3FD9" />
+                        <Border Grid.Row="1" Grid.Column="2" Width="34" Height="34" Background="#FFE81123" BorderBrush="#1F000000" BorderThickness="1" CornerRadius="8" PointerPressed="OnSwatchPressed" Tag="#FFE81123" />
+                        <Border Grid.Row="1" Grid.Column="3" Width="34" Height="34" Background="#FF2F7DD1" BorderBrush="#1F000000" BorderThickness="1" CornerRadius="8" PointerPressed="OnSwatchPressed" Tag="#FF2F7DD1" />
+                        <Border Grid.Row="1" Grid.Column="4" Width="34" Height="34" Background="#FF1F6B33" BorderBrush="#1F000000" BorderThickness="1" CornerRadius="8" PointerPressed="OnSwatchPressed" Tag="#FF1F6B33" />
+
+                        <!-- 调色盘入口 -->
+                        <Border
+                            x:Name="ColorWheelSwatch"
+                            Grid.Row="1"
+                            Grid.Column="5"
+                            Width="34"
+                            Height="34"
+                            Background="#FFFFFFFF"
+                            BorderBrush="#1F000000"
+                            BorderThickness="1"
+                            CornerRadius="17"
+                            PointerPressed="OnColorWheelPressed"
+                            ToolTipService.ToolTip="更多颜色">
+                            <Grid>
+                                <Ellipse>
+                                    <Ellipse.Fill>
+                                        <LinearGradientBrush StartPoint="0,0.5" EndPoint="1,0.5">
+                                            <GradientStop Offset="0" Color="#FFFF2D2D" />
+                                            <GradientStop Offset="0.17" Color="#FFFFCC00" />
+                                            <GradientStop Offset="0.34" Color="#FF5FD35F" />
+                                            <GradientStop Offset="0.5" Color="#FF2FD9C5" />
+                                            <GradientStop Offset="0.67" Color="#FF3D7DFF" />
+                                            <GradientStop Offset="0.84" Color="#FFA24DFF" />
+                                            <GradientStop Offset="1" Color="#FFFF2D8F" />
+                                        </LinearGradientBrush>
+                                    </Ellipse.Fill>
+                                </Ellipse>
+                                <Ellipse Width="12" Height="12" Fill="#FFFFFFFF" />
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </StackPanel>
+
+                <!-- 右半：笔类型列表（图标 + 文字；激光笔暂未开放） -->
+                <Border
+                    Grid.Column="1"
+                    Padding="6"
+                    BorderBrush="#1F000000"
+                    BorderThickness="1"
+                    CornerRadius="8">
+                    <StackPanel Spacing="4">
+                        <ToggleButton
+                            x:Name="LaserButton"
+                            Foreground="#FFB3B3B3"
+                            IsEnabled="False"
+                            Style="{StaticResource PenKindStyle}"
+                            ToolTipService.ToolTip="暂未开放">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Viewbox Width="17" Height="17">
+                                    <Path
+                                        Width="20" Height="20"
+                                        Data="M14.458 1.666a.5.5 0 1 0-1 0v.833a.5.5 0 0 0 1 0zM17.853 2.853a.5.5 0 0 0-.707-.707l-1.5 1.5a.5.5 0 0 0 .707.707zM7.853 12.853a.5.5 0 1 0-.707-.707l-1 1a.5.5 0 1 0 .707.707zM7 4.999v3.793l-4.292 4.293a2 2 0 0 0 0 2.829l1.379 1.378a2 2 0 0 0 2.828 0L11.207 13h3.792a.5.5 0 0 0 .354-.146l1.44-1.44a2 2 0 0 0 0-2.828l-5.38-5.379a2 2 0 0 0-2.828 0l-1.44 1.44A.5.5 0 0 0 7 4.999M9.293 3.914a1 1 0 0 1 1.415 0l5.378 5.378a1 1 0 0 1 0 1.415L15 11.792L8.208 5zM8 6.206L13.792 12h-2.585L7.999 8.792zM7.5 9.706l2.794 2.793l-4.086 4.086a1 1 0 0 1-1.414 0l-1.379-1.378a1 1 0 0 1 0-1.415zM17.5 5.541a.5.5 0 1 0 0 1h.834a.5.5 0 1 0 0-1z"
+                                        Fill="#FFB3B3B3"
+                                        Stretch="None" />
+                                </Viewbox>
+                                <TextBlock VerticalAlignment="Center" FontSize="13" Text="激光笔" />
+                            </StackPanel>
+                        </ToggleButton>
+                        <ToggleButton
+                            x:Name="HighlighterButton"
+                            Style="{StaticResource PenKindStyle}"
+                            ToolTipService.ToolTip="半透明宽笔触"
+                            Click="OnPenKindClick">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Viewbox Width="17" Height="17">
+                                    <Path
+                                        Width="20" Height="20"
+                                        Data="M3.5 2a.5.5 0 0 1 .5.5v4a.5.5 0 0 0 .5.5h11a.5.5 0 0 0 .5-.5v-4a.5.5 0 0 1 1 0v4a1.5 1.5 0 0 1-1 1.415V9a2 2 0 0 1-2 2v2.073a2 2 0 0 1-1.106 1.789l-6.17 3.085A.5.5 0 0 1 6 17.5V11a2 2 0 0 1-2-2V7.915A1.5 1.5 0 0 1 3 6.5v-4a.5.5 0 0 1 .5-.5M5 8v1a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V8zM7 11v5.691l5.447-2.724a1 1 0 0 0 .553-.894V11z"
+                                        Fill="#FF2B2B2B"
+                                        Stretch="None" />
+                                </Viewbox>
+                                <TextBlock VerticalAlignment="Center" FontSize="13" Text="荧光笔" />
+                            </StackPanel>
+                        </ToggleButton>
+                        <ToggleButton
+                            x:Name="HardPenButton"
+                            IsChecked="True"
+                            Style="{StaticResource PenKindStyle}"
+                            ToolTipService.ToolTip="粗细均匀、无笔锋"
+                            Click="OnPenKindClick">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Viewbox Width="17" Height="17">
+                                    <Path
+                                        Width="20" Height="20"
+                                        Data="M17.18 2.926a2.975 2.975 0 0 0-4.26-.054l-9.375 9.375a2.44 2.44 0 0 0-.655 1.194l-.878 3.95a.5.5 0 0 0 .597.597l3.926-.873a2.5 2.5 0 0 0 1.234-.678l7.98-7.98l.337.336a1 1 0 0 1 0 1.414l-.94.94a.5.5 0 0 0 .708.706l.939-.94a2 2 0 0 0 0-2.828l-.336-.336l.67-.67a2.975 2.975 0 0 0 .052-4.153m-3.553.653a1.975 1.975 0 0 1 2.793 2.793L7.062 15.73a1.5 1.5 0 0 1-.744.409l-3.16.702l.708-3.183a1.43 1.43 0 0 1 .387-.704z"
+                                        Fill="#FF2B2B2B"
+                                        Stretch="None" />
+                                </Viewbox>
+                                <TextBlock VerticalAlignment="Center" FontSize="13" Text="硬笔" />
+                            </StackPanel>
+                        </ToggleButton>
+                        <ToggleButton
+                            x:Name="SoftPenButton"
+                            Style="{StaticResource PenKindStyle}"
+                            ToolTipService.ToolTip="带笔锋，快速提笔出尖"
+                            Click="OnPenKindClick">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Viewbox Width="17" Height="17">
+                                    <Path
+                                        Width="20" Height="20"
+                                        Data="M17.18 2.926a2.975 2.975 0 0 0-4.26-.054l-9.375 9.375a2.44 2.44 0 0 0-.655 1.194l-.878 3.95a.5.5 0 0 0 .597.597l3.926-.873a2.5 2.5 0 0 0 1.234-.678l7.98-7.98l.337.336a1 1 0 0 1 0 1.414l-.94.94a.5.5 0 0 0 .708.706l.939-.94a2 2 0 0 0 0-2.828l-.336-.336l.67-.67a2.975 2.975 0 0 0 .052-4.153m-3.553.653a1.975 1.975 0 0 1 2.793 2.793L7.062 15.73a1.5 1.5 0 0 1-.744.409l-3.16.702l.708-3.183a1.43 1.43 0 0 1 .387-.704z"
+                                        Fill="#FF2B2B2B"
+                                        Stretch="None" />
+                                </Viewbox>
+                                <TextBlock VerticalAlignment="Center" FontSize="13" Text="软笔" />
+                            </StackPanel>
+                        </ToggleButton>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
 
         <!-- 白色圆角竖条卡片：靠右侧垂直居中 -->
         <Border
