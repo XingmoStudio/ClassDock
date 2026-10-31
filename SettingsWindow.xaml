@@ -449,7 +449,7 @@
                             CornerRadius="8"
                             Padding="16,14,16,14">
                             <StackPanel Spacing="4">
-                                <TextBlock FontSize="13" Text="Copyright (c) 2026 Xingmo" />
+                                <TextBlock FontSize="13" Text="Copyright (c) 2026 XingmoStudio" />
                                 <TextBlock
                                     FontSize="12"
                                     Foreground="#66000000"
@@ -516,17 +516,17 @@
                                 <RadioButton
                                     x:Name="CrashSilentExit"
                                     Margin="0,6,0,0"
-                                    Content="崩溃时静默退出"
+                                    Content="静默退出"
                                     GroupName="CrashBehavior"
                                     Checked="OnCrashBehaviorChanged" />
                                 <RadioButton
                                     x:Name="CrashShowError"
-                                    Content="崩溃时显示错误信息"
+                                    Content="显示错误信息"
                                     GroupName="CrashBehavior"
                                     Checked="OnCrashBehaviorChanged" />
                                 <RadioButton
                                     x:Name="CrashRestart"
-                                    Content="崩溃时静默重启"
+                                    Content="静默重启"
                                     GroupName="CrashBehavior"
                                     Checked="OnCrashBehaviorChanged" />
 
