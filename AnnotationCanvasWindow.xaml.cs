@@ -39,12 +39,14 @@ public enum PenKind
 /// <summary>
 /// 全屏批注画布：置顶、无边框，底层铺一张进入批注时的屏幕快照，
 /// 笔迹用 Pointer 事件 + Polyline 自绘（WinUI 3 无 InkCanvas）；
-/// 撤销/重做以“整条笔迹”为单位，橡皮整条删除。
+/// 撤销/重做按编辑动作入栈；橡皮按面积擦除，被擦到的笔迹截断成多段保留。
 /// </summary>
 public sealed partial class AnnotationCanvasWindow : Window
 {
     private const double PenThickness = 3;
-    private const double EraserRadius = 10;
+
+    /// <summary>橡皮擦除半径，由橡皮面板的三档“大小”调整。</summary>
+    private double _eraserRadius = 12;
 
     private static readonly Color PenColor = Color.FromArgb(0xFF, 0xE8, 0x11, 0x23);
 
@@ -56,7 +58,15 @@ public sealed partial class AnnotationCanvasWindow : Window
         = new(Color.FromArgb(0x1F, 0x00, 0x00, 0x00));
 
     private readonly List<InkStroke> _strokes = [];
-    private readonly Stack<InkStroke> _redo = [];
+    private readonly Stack<EditAction> _undo = [];
+    private readonly Stack<EditAction> _redo = [];
+
+    /// <summary>本次橡皮拖动中被整体移除的原笔迹（撤销时还原）。</summary>
+    private readonly List<InkStroke> _eraseRemoved = [];
+
+    /// <summary>本次橡皮拖动中切割出的最终片段（撤销时移除）。</summary>
+    private readonly List<InkStroke> _eraseFragments = [];
+
     private InkStroke? _current;
     private AnnotationTool _tool = AnnotationTool.Pen;
     private bool _erasing;
@@ -75,6 +85,14 @@ public sealed partial class AnnotationCanvasWindow : Window
         public long LastTimestamp { get; set; }
         public required double BaseThickness { get; init; }
         public required PenKind Kind { get; init; }
+        public required Color Color { get; init; }
+    }
+
+    /// <summary>一次可撤销的编辑，撤销与重做各自维护画布状态。</summary>
+    private sealed class EditAction(Action undo, Action redo)
+    {
+        public void Undo() => undo();
+        public void Redo() => redo();
     }
 
     /// <summary>笔类型对应的基准线宽：荧光笔最宽，软笔略宽于硬笔。</summary>
@@ -112,12 +130,47 @@ public sealed partial class AnnotationCanvasWindow : Window
         IconOf(PenButton).Fill = AccentBrush;
         UpdateThicknessVisuals();
         UpdateSwatchSelection();
+        UpdateEraserSizeVisuals();
         AddAccelerators();
     }
 
     /// <summary>按钮内容 = Viewbox + Path，取出其中的 Path 以便切换选中态颜色。
     /// （Path 上不能写 x:Name——XamlCompiler 会静默崩溃；也不支持 AncestorType 绑定。）</summary>
     private static Path IconOf(ButtonBase button) => (Path)((Viewbox)button.Content).Child;
+
+    // ── 橡皮贴图：跟随指针移动，压在最上层，不参与命中测试；只在绘制区域显示 ──
+
+    /// <summary>橡皮贴图边长随擦除半径缩放，让擦除范围可见。</summary>
+    private double EraserVisualSize => Math.Max(24, _eraserRadius * 2 + 8);
+
+    /// <summary>橡皮工具下让贴图跟随指针（贴图中心对齐指针，避免偏移造成擦除手感偏差）。
+    /// 指针移到笔设置栏或工具栏时收起，绘制区域之外不显示橡皮。</summary>
+    private void UpdateEraserVisual(Point position, object? source)
+    {
+        if (_tool != AnnotationTool.Eraser || IsOverUiPanel(source))
+        {
+            HideEraserVisual();
+            return;
+        }
+
+        Canvas.SetLeft(EraserImage, position.X - EraserVisualSize / 2);
+        Canvas.SetTop(EraserImage, position.Y - EraserVisualSize / 2);
+        EraserImage.Visibility = Visibility.Visible;
+    }
+
+    private void HideEraserVisual() => EraserImage.Visibility = Visibility.Collapsed;
+
+    /// <summary>沿可视树向上找命名容器，判断指针是否落在笔设置栏 / 工具栏上。</summary>
+    private static bool IsOverUiPanel(object? source)
+    {
+        var element = source as DependencyObject;
+        while (element is not null)
+        {
+            if (element is FrameworkElement { Name: "PenPanel" or "EraserPanel" or "Card" }) return true;
+            element = VisualTreeHelper.GetParent(element);
+        }
+        return false;
+    }
 
     /// <summary>铺满主屏（物理像素）并显示；不激活，避免打断前台内容。</summary>
     public void ShowFullscreen(int screenWpx, int screenHpx)
@@ -153,69 +206,105 @@ public sealed partial class AnnotationCanvasWindow : Window
 
         if (_tool == tool)
         {
-            // 画笔已选中时再点一次 → 弹出/收起画笔设置面板
+            // 该工具已选中时再点一次 → 弹出/收起对应的设置面板
             if (tool == AnnotationTool.Pen) TogglePenPanel();
+            else if (tool == AnnotationTool.Eraser) ToggleEraserPanel();
             return;
         }
         FinishStroke();
         _tool = tool;
-        // 切走画笔时收起设置面板
+        HideEraserVisual();
+        // 切走对应工具时收起它的设置面板
         if (tool != AnnotationTool.Pen) HidePenPanel();
+        if (tool != AnnotationTool.Eraser) HideEraserPanel();
     }
 
-    // ── 画笔设置面板：颜色 / 粗细 ──
+    // ── 设置面板（画笔 / 橡皮）：都从右侧工具栏向左滑入，再向右收起 ──
 
     private const double PanelSlideDistance = 48;
-    private bool _penPanelClosing;
+    private readonly HashSet<Border> _closingPanels = [];
     private bool _sliderPinned;
     private bool _sliderHovered;
 
     private void TogglePenPanel()
     {
-        if (PenPanel.Visibility == Visibility.Visible && !_penPanelClosing) HidePenPanel();
-        else ShowPenPanel();
+        if (PenPanel.Visibility == Visibility.Visible && !_closingPanels.Contains(PenPanel)) HidePenPanel();
+        else ShowSlidePanel(PenPanel);
     }
 
-    /// <summary>从右侧滑出：面板贴右侧工具栏，向左位移归位并淡入。</summary>
-    private void ShowPenPanel()
+    private void HidePenPanel() => HideSlidePanel(PenPanel);
+
+    private void ToggleEraserPanel()
     {
-        _penPanelClosing = false;
-        PenPanel.Visibility = Visibility.Visible;
+        if (EraserPanel.Visibility == Visibility.Visible && !_closingPanels.Contains(EraserPanel)) HideEraserPanel();
+        else ShowSlidePanel(EraserPanel);
+    }
+
+    private void HideEraserPanel() => HideSlidePanel(EraserPanel);
+
+    /// <summary>从右侧滑出：面板贴右侧工具栏，向左位移归位并淡入。</summary>
+    private void ShowSlidePanel(Border panel)
+    {
+        _closingPanels.Remove(panel);
+        panel.Visibility = Visibility.Visible;
         var slide = new TranslateTransform { X = PanelSlideDistance };
-        PenPanel.RenderTransform = slide;
-        PenPanel.Opacity = 0;
+        panel.RenderTransform = slide;
+        panel.Opacity = 0;
 
         var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
         var storyboard = new Storyboard();
         storyboard.Children.Add(BuildAnimation(slide, "X", PanelSlideDistance, 0, 220, ease));
-        storyboard.Children.Add(BuildAnimation(PenPanel, "Opacity", 0, 1, 180, ease));
+        storyboard.Children.Add(BuildAnimation(panel, "Opacity", 0, 1, 180, ease));
         storyboard.Begin();
     }
 
     /// <summary>向右收回后再隐藏，避免面板突然消失。</summary>
-    private void HidePenPanel()
+    private void HideSlidePanel(Border panel)
     {
-        if (PenPanel.Visibility != Visibility.Visible || _penPanelClosing) return;
+        if (panel.Visibility != Visibility.Visible || _closingPanels.Contains(panel)) return;
 
-        _penPanelClosing = true;
-        var slide = PenPanel.RenderTransform as TranslateTransform ?? new TranslateTransform();
-        PenPanel.RenderTransform = slide;
+        _closingPanels.Add(panel);
+        var slide = panel.RenderTransform as TranslateTransform ?? new TranslateTransform();
+        panel.RenderTransform = slide;
 
         var ease = new CubicEase { EasingMode = EasingMode.EaseIn };
         var storyboard = new Storyboard();
         storyboard.Children.Add(BuildAnimation(slide, "X", slide.X, PanelSlideDistance, 150, ease));
-        storyboard.Children.Add(BuildAnimation(PenPanel, "Opacity", PenPanel.Opacity, 0, 130, ease));
+        storyboard.Children.Add(BuildAnimation(panel, "Opacity", panel.Opacity, 0, 130, ease));
         storyboard.Completed += (_, _) =>
         {
             // 收回过程中又被点开：放弃这次隐藏
-            if (!_penPanelClosing) return;
-            _penPanelClosing = false;
+            if (!_closingPanels.Contains(panel)) return;
+            _closingPanels.Remove(panel);
             storyboard.Stop();
             slide.X = 0;
-            PenPanel.Opacity = 1;
-            PenPanel.Visibility = Visibility.Collapsed;
+            panel.Opacity = 1;
+            panel.Visibility = Visibility.Collapsed;
         };
         storyboard.Begin();
+    }
+
+    // ── 橡皮设置面板：清空 / 三档大小 ──
+
+    private void OnEraserClearClick(object sender, RoutedEventArgs e) => ClearAll();
+
+    private void OnEraserSizePresetPressed(object sender, PointerRoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: string tag }
+            || !double.TryParse(tag, out double radius)) return;
+
+        _eraserRadius = radius;
+        UpdateEraserSizeVisuals();
+    }
+
+    private void UpdateEraserSizeVisuals()
+    {
+        if (EraserSizeLabel is null) return;
+        string size = _eraserRadius < 9 ? "小" : _eraserRadius < 16 ? "中" : "大";
+        EraserSizeLabel.Text = $"大小 {size}";
+
+        EraserImage.Width = EraserVisualSize;
+        EraserImage.Height = EraserVisualSize;
     }
 
     private void OnPenColorChanged(ColorPicker sender, ColorChangedEventArgs args)
@@ -392,6 +481,7 @@ public sealed partial class AnnotationCanvasWindow : Window
     {
         var point = e.GetCurrentPoint(Root);
         var position = point.Position;
+        UpdateEraserVisual(position, e.OriginalSource);
 
         if (point.Properties.IsRightButtonPressed)
         {
@@ -410,6 +500,8 @@ public sealed partial class AnnotationCanvasWindow : Window
         {
             case AnnotationTool.Eraser:
                 _erasing = true;
+                _eraseRemoved.Clear();
+                _eraseFragments.Clear();
                 EraseAt(position);
                 break;
 
@@ -450,7 +542,8 @@ public sealed partial class AnnotationCanvasWindow : Window
         {
             Visual = visual,
             BaseThickness = NominalThickness,
-            Kind = _penKind
+            Kind = _penKind,
+            Color = _penColor
         };
         stroke.Points.Add(p);
         stroke.HalfWidths.Add(stroke.BaseThickness / 2 * (stroke.Kind == PenKind.Soft ? 0.6 : 1));
@@ -469,6 +562,9 @@ public sealed partial class AnnotationCanvasWindow : Window
         InkLayer.Children.Add(visual);
         _strokes.Add(stroke);
         _redo.Clear();
+        _undo.Push(new EditAction(
+            () => DetachStroke(stroke),
+            () => AttachStroke(stroke)));
         return stroke;
     }
 
@@ -690,10 +786,11 @@ public sealed partial class AnnotationCanvasWindow : Window
 
     private void OnPointerMoved(object sender, PointerRoutedEventArgs e)
     {
-        if (e.Pointer.PointerId != _activePointerId) return;
-
         var point = e.GetCurrentPoint(Root);
         var p = point.Position;
+        UpdateEraserVisual(p, e.OriginalSource);
+
+        if (e.Pointer.PointerId != _activePointerId) return;
 
         if (_erasing)
         {
@@ -707,6 +804,8 @@ public sealed partial class AnnotationCanvasWindow : Window
         if (Math.Abs(p.X - last.X) < 1.2 && Math.Abs(p.Y - last.Y) < 1.2) return;
         AppendStrokePoint(_current, p);
     }
+
+    private void OnPointerExited(object sender, PointerRoutedEventArgs e) => HideEraserVisual();
 
     private void OnPointerReleased(object sender, PointerRoutedEventArgs e)
     {
@@ -746,36 +845,171 @@ public sealed partial class AnnotationCanvasWindow : Window
             }
         }
         _current = null;
+        CommitErase();
         _erasing = false;
     }
 
-    // ── 橡皮：整条笔迹删除 ──
+    // ── 橡皮：面积擦 —— 擦除范围内的采样点被剔除，笔迹剩余部分拆成多段保留 ──
 
     private void EraseAt(Point position)
     {
         for (int i = _strokes.Count - 1; i >= 0; i--)
         {
             var stroke = _strokes[i];
-            if (!HitStroke(stroke, position)) continue;
+            var fragments = FragmentStroke(stroke, position);
+            if (fragments is null) continue;      // 没擦到，保持原样
 
             _strokes.RemoveAt(i);
             InkLayer.Children.Remove(stroke.Visual);
-            _redo.Push(stroke);
+
+            // 拖动中切出来的片段再被切时，只需从片段集合里摘掉，撤销时才能还原到拖动前的状态
+            if (!_eraseFragments.Remove(stroke)) _eraseRemoved.Add(stroke);
+
+            for (int f = 0; f < fragments.Count; f++)
+            {
+                _strokes.Insert(i + f, fragments[f]);
+                InkLayer.Children.Add(fragments[f].Visual);
+                _eraseFragments.Add(fragments[f]);
+            }
+            _redo.Clear();
         }
     }
 
-    private static bool HitStroke(InkStroke stroke, Point p)
+    /// <summary>按擦除圆命中判断：返回 null 表示完全没擦到；返回空列表表示整条被擦掉；
+    /// 否则返回剩余连续段的片段笔迹。</summary>
+    private List<InkStroke>? FragmentStroke(InkStroke stroke, Point eraser)
     {
-        double radius = EraserRadius + stroke.BaseThickness / 2;
         var points = stroke.Points;
+        int count = points.Count;
+        var erased = new bool[count];
+        bool hit = false;
 
-        if (points.Count == 1) return Distance(p, points[0]) <= radius;
-
-        for (int i = 1; i < points.Count; i++)
+        for (int i = 0; i < count; i++)
         {
-            if (DistanceToSegment(p, points[i - 1], points[i]) <= radius) return true;
+            double half = HalfWidthAt(stroke, i);
+            if (Distance(eraser, points[i]) <= _eraserRadius + half)
+            {
+                erased[i] = true;
+                hit = true;
+            }
         }
-        return false;
+        if (!hit) return null;
+
+        var fragments = new List<InkStroke>();
+        int start = -1;
+        for (int i = 0; i <= count; i++)
+        {
+            bool keep = i < count && !erased[i];
+            if (keep)
+            {
+                if (start < 0) start = i;
+            }
+            else if (start >= 0)
+            {
+                fragments.Add(CreateFragment(stroke, start, i - 1));
+                start = -1;
+            }
+        }
+        return fragments;
+    }
+
+    private static double HalfWidthAt(InkStroke stroke, int index)
+        => stroke.Kind == PenKind.Soft && index < stroke.HalfWidths.Count
+            ? stroke.HalfWidths[index]
+            : stroke.BaseThickness / 2;
+
+    /// <summary>用原笔迹的一段采样点造出片段，保持颜色、笔类型与线宽。</summary>
+    private static InkStroke CreateFragment(InkStroke source, int from, int to)
+    {
+        var points = new List<Point>();
+        var halfWidths = new List<double>();
+        for (int i = from; i <= to; i++)
+        {
+            points.Add(source.Points[i]);
+            halfWidths.Add(HalfWidthAt(source, i));
+        }
+
+        // 单点片段补一个极短线段，让它显示为圆点
+        if (points.Count == 1)
+        {
+            points.Add(new Point(points[0].X + 0.5, points[0].Y));
+            halfWidths.Add(halfWidths[0]);
+        }
+
+        var brush = new SolidColorBrush(source.Color);
+        Shape visual;
+        if (source.Kind == PenKind.Soft)
+        {
+            visual = new Path { Fill = brush, IsHitTestVisible = false };
+        }
+        else
+        {
+            visual = new Polyline
+            {
+                Stroke = brush,
+                StrokeThickness = source.BaseThickness,
+                Opacity = source.Kind == PenKind.Highlighter ? 0.35 : 1,
+                StrokeLineJoin = PenLineJoin.Round,
+                StrokeStartLineCap = source.Kind == PenKind.Highlighter ? PenLineCap.Flat : PenLineCap.Round,
+                StrokeEndLineCap = source.Kind == PenKind.Highlighter ? PenLineCap.Flat : PenLineCap.Round,
+                IsHitTestVisible = false
+            };
+        }
+
+        var fragment = new InkStroke
+        {
+            Visual = visual,
+            BaseThickness = source.BaseThickness,
+            Kind = source.Kind,
+            Color = source.Color
+        };
+        fragment.Points.AddRange(points);
+        fragment.HalfWidths.AddRange(halfWidths);
+
+        if (visual is Polyline line)
+        {
+            foreach (var p in points) line.Points.Add(p);
+        }
+        else
+        {
+            RebuildSoftInk(fragment);
+        }
+        return fragment;
+    }
+
+    /// <summary>一次橡皮拖动结束后合并成一条撤销记录。</summary>
+    private void CommitErase()
+    {
+        if (_eraseRemoved.Count == 0) return;
+
+        var removed = _eraseRemoved.ToList();
+        var fragments = _eraseFragments.ToList();
+        _eraseRemoved.Clear();
+        _eraseFragments.Clear();
+
+        _undo.Push(new EditAction(
+            () =>
+            {
+                foreach (var f in fragments) DetachStroke(f);
+                foreach (var s in removed) AttachStroke(s);
+            },
+            () =>
+            {
+                foreach (var s in removed) DetachStroke(s);
+                foreach (var f in fragments) AttachStroke(f);
+            }));
+    }
+
+    private void AttachStroke(InkStroke stroke)
+    {
+        _strokes.Add(stroke);
+        InkLayer.Children.Add(stroke.Visual);
+    }
+
+    private void DetachStroke(InkStroke stroke)
+    {
+        _strokes.Remove(stroke);
+        InkLayer.Children.Remove(stroke.Visual);
     }
 
     private static double Distance(Point a, Point b)
@@ -784,30 +1018,16 @@ public sealed partial class AnnotationCanvasWindow : Window
         return Math.Sqrt(dx * dx + dy * dy);
     }
 
-    private static double DistanceToSegment(Point p, Point a, Point b)
-    {
-        double abx = b.X - a.X, aby = b.Y - a.Y;
-        double lengthSquared = abx * abx + aby * aby;
-
-        if (lengthSquared <= double.Epsilon) return Distance(p, a);
-
-        double t = ((p.X - a.X) * abx + (p.Y - a.Y) * aby) / lengthSquared;
-        t = Math.Clamp(t, 0, 1);
-
-        return Distance(p, new Point(a.X + t * abx, a.Y + t * aby));
-    }
-
     // ── 撤销 / 重做 / 清空（键盘与右键菜单共用） ──
 
     public void Undo()
     {
         FinishStroke();
-        if (_strokes.Count == 0) return;
+        if (_undo.Count == 0) return;
 
-        var stroke = _strokes[^1];
-        _strokes.RemoveAt(_strokes.Count - 1);
-        InkLayer.Children.Remove(stroke.Visual);
-        _redo.Push(stroke);
+        var action = _undo.Pop();
+        action.Undo();
+        _redo.Push(action);
     }
 
     public void Redo()
@@ -815,9 +1035,9 @@ public sealed partial class AnnotationCanvasWindow : Window
         FinishStroke();
         if (_redo.Count == 0) return;
 
-        var stroke = _redo.Pop();
-        _strokes.Add(stroke);
-        InkLayer.Children.Add(stroke.Visual);
+        var action = _redo.Pop();
+        action.Redo();
+        _undo.Push(action);
     }
 
     public void ClearAll()
@@ -825,6 +1045,7 @@ public sealed partial class AnnotationCanvasWindow : Window
         FinishStroke();
         // 清空视为开启新的一页：不做撤销
         _strokes.Clear();
+        _undo.Clear();
         _redo.Clear();
         InkLayer.Children.Clear();
     }
@@ -858,7 +1079,7 @@ public sealed partial class AnnotationCanvasWindow : Window
     {
         var menu = new MenuFlyout();
 
-        var undo = new MenuFlyoutItem { Text = "撤销", IsEnabled = _strokes.Count > 0 };
+        var undo = new MenuFlyoutItem { Text = "撤销", IsEnabled = _undo.Count > 0 };
         undo.Click += (_, _) => Undo();
         menu.Items.Add(undo);
 

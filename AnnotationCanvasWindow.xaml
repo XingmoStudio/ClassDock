@@ -13,7 +13,8 @@
         PointerPressed="OnPointerPressed"
         PointerMoved="OnPointerMoved"
         PointerReleased="OnPointerReleased"
-        PointerCaptureLost="OnPointerCaptureLost">
+        PointerCaptureLost="OnPointerCaptureLost"
+        PointerExited="OnPointerExited">
         <Grid.Resources>
             <!-- 状态画刷 -->
             <SolidColorBrush x:Key="ToolHoverBrush" Color="#0C000000" />
@@ -418,6 +419,87 @@
             </Grid>
         </Border>
 
+        <!-- 橡皮设置面板（浅色）：清空 + 竖向分隔线 + 三档大小。
+             橡皮已选中时再点一次橡皮按钮弹出/收起 -->
+        <Border
+            x:Name="EraserPanel"
+            Margin="0,0,80,0"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Center"
+            Background="#FFFFFFFF"
+            BorderBrush="#1A000000"
+            BorderThickness="1"
+            CornerRadius="12"
+            Padding="16"
+            Visibility="Collapsed"
+            PointerPressed="OnCardPressed">
+            <StackPanel Orientation="Horizontal" Spacing="16">
+                <!-- 清空 -->
+                <Button
+                    x:Name="ClearButton"
+                    Style="{StaticResource ToolButtonStyle}"
+                    Width="56"
+                    Height="72"
+                    ToolTipService.ToolTip="清空所有笔迹"
+                    Click="OnEraserClearClick">
+                    <StackPanel Spacing="6">
+                        <Viewbox Width="20" Height="20">
+                            <Path
+                                Width="20"
+                                Height="20"
+                                Data="M8.5 4h3a1.5 1.5 0 0 0-3 0m-1 0a2.5 2.5 0 0 1 5 0h5a.5.5 0 0 1 0 1h-1.054l-1.194 10.344A3 3 0 0 1 12.272 18H7.728a3 3 0 0 1-2.98-2.656L3.554 5H2.5a.5.5 0 0 1 0-1zM5.741 15.23A2 2 0 0 0 7.728 17h4.544a2 2 0 0 0 1.987-1.77L15.439 5H4.561zM8.5 7.5A.5.5 0 0 1 9 8v6a.5.5 0 0 1-1 0V8a.5.5 0 0 1 .5-.5M12 8a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"
+                                Fill="#FF2B2B2B"
+                                Stretch="None" />
+                        </Viewbox>
+                        <TextBlock
+                            HorizontalAlignment="Center"
+                            FontSize="12"
+                            Foreground="#FF2B2B2B"
+                            Text="清空" />
+                    </StackPanel>
+                </Button>
+
+                <!-- 竖向分隔线 -->
+                <Border
+                    Width="1"
+                    Margin="0,4"
+                    Background="#14000000" />
+
+                <!-- 三档大小 -->
+                <StackPanel VerticalAlignment="Center" Spacing="8">
+                    <TextBlock
+                        x:Name="EraserSizeLabel"
+                        VerticalAlignment="Center"
+                        FontSize="12"
+                        Foreground="#FF2B2B2B"
+                        Text="大小 中" />
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <Border
+                            Width="28" Height="28"
+                            Background="Transparent"
+                            PointerPressed="OnEraserSizePresetPressed"
+                            Tag="6">
+                            <Ellipse Width="8" Height="8" Fill="#FF8A8A8A" />
+                        </Border>
+                        <Border
+                            Width="28" Height="28"
+                            Background="Transparent"
+                            PointerPressed="OnEraserSizePresetPressed"
+                            Tag="12">
+                            <Ellipse Width="14" Height="14" Fill="#FF8A8A8A" />
+                        </Border>
+                        <Border
+                            Width="28" Height="28"
+                            Background="Transparent"
+                            PointerPressed="OnEraserSizePresetPressed"
+                            Tag="20">
+                            <Ellipse Width="20" Height="20" Fill="#FF8A8A8A" />
+                        </Border>
+                    </StackPanel>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
         <!-- 白色圆角竖条卡片：靠右侧垂直居中 -->
         <Border
             x:Name="Card"
@@ -463,11 +545,11 @@
                             Stretch="None" />
                     </Viewbox>
                 </ToggleButton>
-                <!-- 橡皮 -->
+                <!-- 擦除 -->
                 <ToggleButton
                     x:Name="EraserButton"
                     Style="{StaticResource ToolToggleStyle}"
-                    ToolTipService.ToolTip="橡皮"
+                    ToolTipService.ToolTip="擦除"
                     Click="OnToolClick">
                     <Viewbox Width="20" Height="20">
                         <Path
@@ -515,5 +597,15 @@
                 </Button>
             </StackPanel>
         </Border>
+
+        <!-- 橡皮贴图：跟随指针移动，压在最上层，不参与命中测试 -->
+        <Canvas IsHitTestVisible="False">
+            <Image
+                x:Name="EraserImage"
+                Width="40"
+                Height="40"
+                Source="Assets/Eraser.png"
+                Visibility="Collapsed" />
+        </Canvas>
     </Grid>
 </Window>
