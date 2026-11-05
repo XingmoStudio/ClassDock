@@ -5,6 +5,9 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+// ── App ──
+// 应用入口、设置持久化与崩溃处理策略。
+
 using Windows.Graphics;
 
 namespace ClassDock;
@@ -76,6 +79,7 @@ public partial class App : Application
     private readonly DateTime _startedAt = DateTime.UtcNow;
     private readonly bool _cameFromCrashRestart;
 
+    /// <summary>初始化应用，注册全局未处理异常回调。</summary>
     public App()
     {
         InitializeComponent();
@@ -84,6 +88,7 @@ public partial class App : Application
         UnhandledException += OnUnhandledException;
     }
 
+    /// <summary>全局未处理异常回调：落盘并根据设置决定退出、重启或忽略。</summary>
     private void OnUnhandledException(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs e)
     {
         e.Handled = true;

@@ -24,13 +24,13 @@ public sealed partial class SettingsWindow : Window
         = new(Color.FromArgb(0xFF, 0xFF, 0xFF, 0xFF));
     private static readonly SolidColorBrush TransparentBrush = new(Colors.Transparent);
 
-    private Button? _selectedNav;
-    private Border? _selectedAccent;
-    private bool _loadingSettings;
+    private Button? _selectedNav;       // 当前选中的导航按钮（用于切换选中态底色）
+    private Border? _selectedAccent;    // 当前选中按钮的强调色竖条
+    private bool _loadingSettings;      // 加载设置中，屏蔽 Checked 回调以避免误触保存
 
     // 侧边栏收起状态与两个分组的展开状态
     private bool _collapsed;
-    private bool _sidebarBusy;
+    private bool _sidebarBusy;          // 动画进行中，阻止重复触发收起/展开
     private bool _generalExpanded = true;
     private bool _toolsExpanded = true;
 
@@ -81,6 +81,7 @@ public sealed partial class SettingsWindow : Window
         LoadCrashBehavior();
     }
 
+    /// <summary>导航按钮点击：切换右侧内容页与选中态。</summary>
     private void OnNavClick(object sender, RoutedEventArgs e)
     {
         var button = (Button)sender;
@@ -272,6 +273,7 @@ public sealed partial class SettingsWindow : Window
         return tcs.Task;
     }
 
+    /// <summary>从 AppSettings 读取崩溃处理策略并同步到单选按钮。</summary>
     private void LoadCrashBehavior()
     {
         _loadingSettings = true;
@@ -347,9 +349,9 @@ public sealed partial class SettingsWindow : Window
         Environment.Exit(0);
     }
 
-    // ---------- 第三方库滑出面板 ----------
+    // ── 第三方库滑出面板 ──
 
-    private bool _librariesOpen;
+    private bool _librariesOpen;        // 面板是否正在显示
 
     /// <summary>点击侧边栏“第三方库”：滑出面板。</summary>
     private void OnLibrariesClick(object sender, RoutedEventArgs e)
@@ -376,6 +378,7 @@ public sealed partial class SettingsWindow : Window
         });
     }
 
+    /// <summary>第三方库面板水平位移动画（收起时 EaseIn、展开时 EaseOut）。</summary>
     private void AnimatePanelX(double from, double to, double ms, Action? completed)
     {
         var anim = new Microsoft.UI.Xaml.Media.Animation.DoubleAnimation

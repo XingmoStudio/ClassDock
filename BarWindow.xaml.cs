@@ -4,6 +4,9 @@ using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Input;
 using Windows.Graphics;
+// ── BarWindow ──
+// 屏幕右缘交互白条：透明热区 + 白色胶囊握把，负责面板的开关与拖拽跟手。
+
 using WinRT.Interop;
 
 namespace ClassDock;
@@ -60,6 +63,7 @@ public sealed partial class BarWindow : Window
         Grip.PointerCaptureLost += OnCaptureLost;
     }
 
+    /// <summary>配置窗口样式：无边框、置顶、禁用系统圆角并设置胶囊区域。</summary>
     private void SetupWindow()
     {
         WindowMinSize.RemoveLimits(_hwnd);
@@ -129,15 +133,18 @@ public sealed partial class BarWindow : Window
         _panel.Configure(_panelWpx, _panelHpx, _panelTopPx, _closedXpx);
     }
 
+    /// <summary>DIP 转物理像素。</summary>
     private int Px(double dip) => (int)Math.Round(dip * _scale);
 
     // ── hover 握把 ──
 
+    /// <summary>指针进入握把：完全不透明。</summary>
     private void OnRootEntered(object sender, PointerRoutedEventArgs e)
     {
         Grip.Opacity = 1;
     }
 
+    /// <summary>指针离开握把：恢复半透明（拖拽中不改变）。</summary>
     private void OnRootExited(object sender, PointerRoutedEventArgs e)
     {
         if (_pressed) return;
@@ -146,6 +153,7 @@ public sealed partial class BarWindow : Window
 
     // ── 点击 / 拖拽 ──
 
+    /// <summary>指针按下：记录起始状态，捕获指针。</summary>
     private void OnPointerPressed(object sender, PointerRoutedEventArgs e)
     {
         if (!e.GetCurrentPoint(Grip).Properties.IsLeftButtonPressed) return;
@@ -158,6 +166,7 @@ public sealed partial class BarWindow : Window
         Grip.CapturePointer(e.Pointer);
     }
 
+    /// <summary>指针移动：超过死区后跟手拖拽面板。</summary>
     private void OnPointerMoved(object sender, PointerRoutedEventArgs e)
     {
         if (!_pressed || _panel is null) return;
@@ -182,6 +191,7 @@ public sealed partial class BarWindow : Window
             new PointInt32(_screenWpx - (int)Math.Round(offsetPx), _panelTopPx));
     }
 
+    /// <summary>指针抬起：根据拖拽距离和方向决定吸附状态。</summary>
     private void OnPointerReleased(object sender, PointerRoutedEventArgs e)
     {
         if (!_pressed) return;
@@ -206,16 +216,19 @@ public sealed partial class BarWindow : Window
         }
     }
 
+    /// <summary>指针捕获丢失：重置按下状态。</summary>
     private void OnCaptureLost(object sender, PointerRoutedEventArgs e) => _pressed = false;
 
     // ── 面板开关（带缓动动画） ──
 
+    /// <summary>切换面板开关状态。</summary>
     private void TogglePanel()
     {
         if (_panel is { IsOpen: true }) ClosePanelAnimated();
         else OpenPanelAnimated();
     }
 
+    /// <summary>展开面板：从屏幕外滑入，隐藏白条并启动失焦检测。</summary>
     private void OpenPanelAnimated()
     {
         if (_panel is null) return;
@@ -230,6 +243,7 @@ public sealed partial class BarWindow : Window
         StartAnim(fromX: _closedXpx, toX: _openXpx);
     }
 
+    /// <summary>收起面板：滑出屏幕后隐藏，恢复白条显示。</summary>
     private void ClosePanelAnimated()
     {
         if (_panel is null) return;
@@ -245,6 +259,7 @@ public sealed partial class BarWindow : Window
 
     // ── 屏幕批注会话（画布 + 同窗口内的竖排工具栏） ──
 
+    /// <summary>进入批注模式：收起面板，延迟后截屏并显示画布。</summary>
     private void EnterAnnotation()
     {
         if (_panel is null || _annotationActive) return;
@@ -269,6 +284,7 @@ public sealed partial class BarWindow : Window
         delay.Start();
     }
 
+    /// <summary>截取屏幕并启动全屏批注画布。</summary>
     private void StartAnnotationWindow()
     {
         // 先截屏，再让全屏画布以快照为背景出现
@@ -280,6 +296,7 @@ public sealed partial class BarWindow : Window
         _annoCanvas.ShowFullscreen(_screenWpx, _screenHpx);
     }
 
+    /// <summary>退出批注模式：关闭画布并恢复面板。</summary>
     private void ExitAnnotation()
     {
         if (!_annotationActive || _annoCanvas is null) return;
@@ -314,12 +331,14 @@ public sealed partial class BarWindow : Window
         _focusWatchTimer.Start();
     }
 
+    /// <summary>停止失焦检测计时器。</summary>
     private void StopFocusWatch()
     {
         _focusWatchTimer?.Stop();
         _focusWatchTimer = null;
     }
 
+    /// <summary>启动面板滑入/滑出动画（ExponentialEaseOut）。</summary>
     private void StartAnim(int fromX, int toX, Action? onDone = null)
     {
         var panel = _panel!;
@@ -342,6 +361,7 @@ public sealed partial class BarWindow : Window
         _animTimer.Start();
     }
 
+    /// <summary>停止面板滑动动画。</summary>
     private void StopAnim()
     {
         _animTimer?.Stop();

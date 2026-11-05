@@ -64,14 +64,15 @@ public sealed partial class AnnotationCanvasWindow : Window
     /// <summary>橡皮擦除半径，由橡皮面板的三档“大小”调整。</summary>
     private double _eraserRadius = 12;
 
+    /// <summary>默认画笔颜色（红色）。</summary>
     private static readonly Color PenColor = Color.FromArgb(0xFF, 0xE8, 0x11, 0x23);
 
     /// <summary>强调色画刷均为共享实例：RefreshAccent 只改 Color 即全局生效，无需重建引用。</summary>
     private static readonly SolidColorBrush AccentBrush
         = new(PenColor);
-    private static readonly SolidColorBrush NormalBrush
+    private static readonly SolidColorBrush NormalBrush     // 未选中图标/文字的默认色
         = new(Color.FromArgb(0xFF, 0x2B, 0x2B, 0x2B));
-    private static readonly SolidColorBrush SwatchBorderBrush
+    private static readonly SolidColorBrush SwatchBorderBrush // 色块默认边框（半透明黑）
         = new(Color.FromArgb(0x1F, 0x00, 0x00, 0x00));
 
     /// <summary>主题/个性化系统接口：设置后强调色固定为主题色；恢复为 null 则重新跟随画笔颜色。</summary>
@@ -94,6 +95,7 @@ public sealed partial class AnnotationCanvasWindow : Window
     private readonly SolidColorBrush _toolCheckedHoverBrush;
     private readonly SolidColorBrush _toolCheckedPressedBrush;
 
+    // 笔迹集合与撤销/重做栈
     private readonly List<InkStroke> _strokes = [];
     private readonly Stack<EditAction> _undo = [];
     private readonly Stack<EditAction> _redo = [];
@@ -104,15 +106,20 @@ public sealed partial class AnnotationCanvasWindow : Window
     /// <summary>本次橡皮拖动中切割出的最终片段（撤销时移除）。</summary>
     private readonly List<InkStroke> _eraseFragments = [];
 
-    private InkStroke? _current;
-    private InkStroke? _shapeDraft;
-    private Point _shapeStart;
-    private AnnotationTool _tool = AnnotationTool.Pen;
-    private bool _erasing;
-    private uint _activePointerId;
+    // 当前绘制状态
+    private InkStroke? _current;        // 正在绘制的笔迹
+    private InkStroke? _shapeDraft;     // 几何图形预览草稿（松手时提交或丢弃）
+    private Point _shapeStart;          // 图形起始点
+    private AnnotationTool _tool = AnnotationTool.Pen; // 当前选中工具
+    private bool _erasing;              // 橡皮拖动中
+    private uint _activePointerId;      // 活动指针 ID，过滤其它指针的事件
+
+    // 画笔参数
     private Color _penColor = PenColor;
     private double _penThickness = PenThickness;
     private PenKind _penKind = PenKind.Hard;
+
+    // 图形参数
     private ShapeKind _shapeKind = ShapeKind.Line;
     private double _shapeThickness = 3;
 
@@ -147,13 +154,16 @@ public sealed partial class AnnotationCanvasWindow : Window
         _ => _penThickness
     };
 
+    /// <summary>笔迹透明度：荧光笔半透明，其余笔类型不透明。</summary>
     private double StrokeOpacity => _penKind == PenKind.Highlighter ? 0.35 : 1;
 
+    /// <summary>窗口的原生句柄（HWND）。</summary>
     public IntPtr Hwnd { get; }
 
     /// <summary>按 Esc 请求退出批注（由 BarWindow 负责收尾）。</summary>
     public event Action? ExitRequested;
 
+    /// <summary>初始化批注画布窗口：配置窗口样式、加载画刷资源、刷新 UI 状态并注册快捷键。</summary>
     public AnnotationCanvasWindow()
     {
         InitializeComponent();
@@ -208,6 +218,7 @@ public sealed partial class AnnotationCanvasWindow : Window
         EraserImage.Visibility = Visibility.Visible;
     }
 
+    /// <summary>隐藏橡皮擦贴图。</summary>
     private void HideEraserVisual() => EraserImage.Visibility = Visibility.Collapsed;
 
     /// <summary>沿可视树向上找命名容器，判断指针是否落在笔设置栏 / 工具栏上。</summary>
@@ -234,6 +245,7 @@ public sealed partial class AnnotationCanvasWindow : Window
 
     // ── 工具切换：单选，选中态用主题蓝 ──
 
+    /// <summary>工具栏按钮点击：切换工具或弹出/收起已选工具的设置面板。</summary>
     private void OnToolClick(object sender, RoutedEventArgs e)
     {
         var clicked = (ToggleButton)sender;
@@ -278,28 +290,34 @@ public sealed partial class AnnotationCanvasWindow : Window
     private bool _sliderPinned;
     private bool _sliderHovered;
 
+    /// <summary>切换画笔设置面板的显示/隐藏。</summary>
     private void TogglePenPanel()
     {
         if (PenPanel.Visibility == Visibility.Visible && !_closingPanels.Contains(PenPanel)) HidePenPanel();
         else ShowSlidePanel(PenPanel);
     }
 
+    /// <summary>隐藏画笔设置面板。</summary>
     private void HidePenPanel() => HideSlidePanel(PenPanel);
 
+    /// <summary>切换橡皮设置面板的显示/隐藏。</summary>
     private void ToggleEraserPanel()
     {
         if (EraserPanel.Visibility == Visibility.Visible && !_closingPanels.Contains(EraserPanel)) HideEraserPanel();
         else ShowSlidePanel(EraserPanel);
     }
 
+    /// <summary>隐藏橡皮设置面板。</summary>
     private void HideEraserPanel() => HideSlidePanel(EraserPanel);
 
+    /// <summary>切换几何图形设置面板的显示/隐藏。</summary>
     private void ToggleShapesPanel()
     {
         if (ShapesPanel.Visibility == Visibility.Visible && !_closingPanels.Contains(ShapesPanel)) HideShapesPanel();
         else ShowSlidePanel(ShapesPanel);
     }
 
+    /// <summary>隐藏几何图形设置面板。</summary>
     private void HideShapesPanel() => HideSlidePanel(ShapesPanel);
 
     /// <summary>从右侧滑出：面板贴右侧工具栏，向左位移归位并淡入。</summary>
@@ -346,8 +364,10 @@ public sealed partial class AnnotationCanvasWindow : Window
 
     // ── 橡皮设置面板：清空 / 三档大小 ──
 
+    /// <summary>橡皮面板"清空"按钮：清除所有笔迹。</summary>
     private void OnEraserClearClick(object sender, RoutedEventArgs e) => ClearAll();
 
+    /// <summary>橡皮大小档位按钮：按 Tag 设置擦除半径。</summary>
     private void OnEraserSizePresetPressed(object sender, PointerRoutedEventArgs e)
     {
         if (sender is not FrameworkElement { Tag: string tag }
@@ -357,6 +377,7 @@ public sealed partial class AnnotationCanvasWindow : Window
         UpdateEraserSizeVisuals();
     }
 
+    /// <summary>刷新橡皮大小标签文字与贴图尺寸。</summary>
     private void UpdateEraserSizeVisuals()
     {
         if (EraserSizeLabel is null) return;
@@ -372,6 +393,7 @@ public sealed partial class AnnotationCanvasWindow : Window
     private static readonly SolidColorBrush ShapeActiveBrush = new(Color.FromArgb(0x16, 0x00, 0x78, 0xD4));
     private static readonly SolidColorBrush TransparentBrush = new(Color.FromArgb(0, 0, 0, 0));
 
+    /// <summary>图形选择按钮：按 Tag 切换当前图形类型。</summary>
     private void OnShapeOptionPressed(object sender, PointerRoutedEventArgs e)
     {
         if (sender is not FrameworkElement { Tag: string tag }
@@ -380,6 +402,7 @@ public sealed partial class AnnotationCanvasWindow : Window
         UpdateShapeOptionVisuals();
     }
 
+    /// <summary>图形粗细档位按钮：按 Tag 设置线条粗细。</summary>
     private void OnShapeThicknessPressed(object sender, PointerRoutedEventArgs e)
     {
         if (sender is not FrameworkElement { Tag: string tag }
@@ -404,6 +427,7 @@ public sealed partial class AnnotationCanvasWindow : Window
         }
     }
 
+    /// <summary>刷新图形粗细档位的选中态底色。</summary>
     private void UpdateShapeThicknessVisuals()
     {
         if (ShapeThicknessRow is null) return;
@@ -415,6 +439,7 @@ public sealed partial class AnnotationCanvasWindow : Window
         }
     }
 
+    /// <summary>调色盘颜色变更：同步画笔颜色并刷新强调色与色块选中态。</summary>
     private void OnPenColorChanged(ColorPicker sender, ColorChangedEventArgs args)
     {
         _penColor = args.NewColor;
@@ -436,6 +461,7 @@ public sealed partial class AnnotationCanvasWindow : Window
     /// <summary>保留透明度、替换 RGB，用于由强调色派生各档选中态底色。</summary>
     private static Color WithAlpha(Color color, byte alpha) => Color.FromArgb(alpha, color.R, color.G, color.B);
 
+    /// <summary>粗细滑块值变更：同步画笔粗细并刷新演示曲线。</summary>
     private void OnThicknessChanged(object sender, RangeBaseValueChangedEventArgs e)
     {
         _penThickness = e.NewValue;
@@ -469,12 +495,14 @@ public sealed partial class AnnotationCanvasWindow : Window
         SetSliderVisible(true);
     }
 
+    /// <summary>离开粗细演示区域：若未固定则隐藏滑块、恢复曲线。</summary>
     private void OnPreviewAreaExited(object sender, PointerRoutedEventArgs e)
     {
         _sliderHovered = false;
         if (!_sliderPinned) SetSliderVisible(false);
     }
 
+    /// <summary>切换粗细滑块与演示曲线的显隐互斥状态。</summary>
     private void SetSliderVisible(bool visible)
     {
         ThicknessSlider.Opacity = visible ? 1 : 0;
@@ -485,6 +513,7 @@ public sealed partial class AnnotationCanvasWindow : Window
         }
     }
 
+    /// <summary>固定/取消固定粗细滑块，使其常驻显示或随悬停显隐。</summary>
     private void OnPinSliderClick(object sender, RoutedEventArgs e)
     {
         _sliderPinned = !_sliderPinned;
@@ -504,6 +533,7 @@ public sealed partial class AnnotationCanvasWindow : Window
     private ColorPicker? _colorPicker;
     private Flyout? _colorFlyout;
 
+    /// <summary>调色盘入口点击：弹出 Flyout 承载的圆环调色盘。</summary>
     private void OnColorWheelPressed(object sender, PointerRoutedEventArgs e)
     {
         if (_colorFlyout is null)
@@ -547,6 +577,7 @@ public sealed partial class AnnotationCanvasWindow : Window
         return picker;
     }
 
+    /// <summary>预设色块点击：按 Tag 中的十六进制色值切换画笔颜色。</summary>
     private void OnSwatchPressed(object sender, PointerRoutedEventArgs e)
     {
         if (sender is Border { Tag: string hex })
@@ -559,6 +590,7 @@ public sealed partial class AnnotationCanvasWindow : Window
         }
     }
 
+    /// <summary>将 #RRGGBB 或 #AARRGGBB 格式的字符串解析为 Color。</summary>
     private static Color ParseHex(string hex)
     {
         string digits = hex.TrimStart('#');
@@ -597,10 +629,12 @@ public sealed partial class AnnotationCanvasWindow : Window
     /// <summary>工具栏上的按下不要落到画布上变成笔迹。</summary>
     private void OnCardPressed(object sender, PointerRoutedEventArgs e) => e.Handled = true;
 
+    /// <summary>"返回主面板"按钮：触发退出批注请求。</summary>
     private void OnBackClick(object sender, RoutedEventArgs e) => ExitRequested?.Invoke();
 
     // ── 绘制 ──
 
+    /// <summary>指针按下：右键弹出操作菜单，左键按当前工具开始绘制（笔/橡皮/图形草稿）。</summary>
     private void OnPointerPressed(object sender, PointerRoutedEventArgs e)
     {
         var point = e.GetCurrentPoint(Root);
@@ -692,6 +726,7 @@ public sealed partial class AnnotationCanvasWindow : Window
 
     private const double ShapeSampleStep = 6;
 
+    /// <summary>按图形类型生成密化轮廓点（间距 ≤ ShapeSampleStep），供渲染与橡皮命中判定复用。</summary>
     private static List<Point> BuildShapePoints(ShapeKind kind, Point a, Point b)
     {
         switch (kind)
@@ -744,6 +779,7 @@ public sealed partial class AnnotationCanvasWindow : Window
         }
     }
 
+    /// <summary>计算两点确定的矩形包围盒。</summary>
     private static void ShapeBounds(Point a, Point b, out double x1, out double y1, out double x2, out double y2)
     {
         x1 = Math.Min(a.X, b.X); y1 = Math.Min(a.Y, b.Y);
@@ -827,6 +863,7 @@ public sealed partial class AnnotationCanvasWindow : Window
         return EnsureDensity(corners);
     }
 
+    /// <summary>向点列追加一段圆弧采样点（7 点近似 90° 弧）。</summary>
     private static void AddArc(List<Point> points, Point center, double r, double fromDeg, double toDeg)
     {
         for (int i = 0; i <= 6; i++)
@@ -1054,6 +1091,7 @@ public sealed partial class AnnotationCanvasWindow : Window
         path.Data = BuildOutlineGeometry(outline);
     }
 
+    /// <summary>将闭合轮廓点列转为 Nonzero 填充的 PathGeometry，避免自交处出现空洞。</summary>
     private static PathGeometry BuildOutlineGeometry(List<Point> outline)
     {
         var figure = new PathFigure
@@ -1071,6 +1109,7 @@ public sealed partial class AnnotationCanvasWindow : Window
         return geometry;
     }
 
+    /// <summary>返回 from→to 方向的单位向量；零向量时回退为 (1,0)。</summary>
     private static Point Unit(Point from, Point to)
     {
         double dx = to.X - from.X, dy = to.Y - from.Y;
@@ -1078,6 +1117,7 @@ public sealed partial class AnnotationCanvasWindow : Window
         return length < 0.0001 ? new Point(1, 0) : new Point(dx / length, dy / length);
     }
 
+    /// <summary>返回 a→b 方向的左旋法线单位向量。</summary>
     private static Point Normal(Point a, Point b)
     {
         var dir = Unit(a, b);
@@ -1150,6 +1190,7 @@ public sealed partial class AnnotationCanvasWindow : Window
         return sum / take;
     }
 
+    /// <summary>指针移动：橡皮持续擦除、图形草稿实时预览、画笔追加采样点（过滤微抖动）。</summary>
     private void OnPointerMoved(object sender, PointerRoutedEventArgs e)
     {
         var point = e.GetCurrentPoint(Root);
@@ -1177,8 +1218,10 @@ public sealed partial class AnnotationCanvasWindow : Window
         AppendStrokePoint(_current, p);
     }
 
+    /// <summary>指针离开画布：隐藏橡皮贴图。</summary>
     private void OnPointerExited(object sender, PointerRoutedEventArgs e) => HideEraserVisual();
 
+    /// <summary>指针抬起：释放捕获并结束当前笔迹/草稿。</summary>
     private void OnPointerReleased(object sender, PointerRoutedEventArgs e)
     {
         if (e.Pointer.PointerId != _activePointerId) return;
@@ -1188,6 +1231,7 @@ public sealed partial class AnnotationCanvasWindow : Window
         FinishStroke();
     }
 
+    /// <summary>指针捕获丢失：重置活动指针并结束绘制。</summary>
     private void OnPointerCaptureLost(object sender, PointerRoutedEventArgs e)
     {
         _activePointerId = 0;
@@ -1243,6 +1287,7 @@ public sealed partial class AnnotationCanvasWindow : Window
 
     // ── 橡皮：面积擦 —— 擦除范围内的采样点被剔除，笔迹剩余部分拆成多段保留 ──
 
+    /// <summary>以 position 为圆心、按擦除半径逐条切割笔迹，剩余片段原地替换。</summary>
     private void EraseAt(Point position)
     {
         for (int i = _strokes.Count - 1; i >= 0; i--)
@@ -1305,6 +1350,7 @@ public sealed partial class AnnotationCanvasWindow : Window
         return fragments;
     }
 
+    /// <summary>取笔迹指定索引处的半宽：软笔读 HalfWidths，其余取基准线宽的一半。</summary>
     private static double HalfWidthAt(InkStroke stroke, int index)
         => stroke.Kind == PenKind.Soft && index < stroke.HalfWidths.Count
             ? stroke.HalfWidths[index]
@@ -1398,18 +1444,21 @@ public sealed partial class AnnotationCanvasWindow : Window
             }));
     }
 
+    /// <summary>将笔迹挂回集合与画布（撤销/重做共用）。</summary>
     private void AttachStroke(InkStroke stroke)
     {
         _strokes.Add(stroke);
         InkLayer.Children.Add(stroke.Visual);
     }
 
+    /// <summary>从集合与画布移除笔迹（撤销/重做共用）。</summary>
     private void DetachStroke(InkStroke stroke)
     {
         _strokes.Remove(stroke);
         InkLayer.Children.Remove(stroke.Visual);
     }
 
+    /// <summary>计算两点间的欧氏距离。</summary>
     private static double Distance(Point a, Point b)
     {
         double dx = a.X - b.X, dy = a.Y - b.Y;
@@ -1418,6 +1467,7 @@ public sealed partial class AnnotationCanvasWindow : Window
 
     // ── 撤销 / 重做 / 清空（键盘与右键菜单共用） ──
 
+    /// <summary>撤销上一步编辑操作。</summary>
     public void Undo()
     {
         FinishStroke();
@@ -1428,6 +1478,7 @@ public sealed partial class AnnotationCanvasWindow : Window
         _redo.Push(action);
     }
 
+    /// <summary>重做上一步撤销的操作。</summary>
     public void Redo()
     {
         FinishStroke();
@@ -1438,6 +1489,7 @@ public sealed partial class AnnotationCanvasWindow : Window
         _undo.Push(action);
     }
 
+    /// <summary>清空所有笔迹与撤销/重做栈（视为开启新的一页）。</summary>
     public void ClearAll()
     {
         FinishStroke();
@@ -1450,6 +1502,7 @@ public sealed partial class AnnotationCanvasWindow : Window
 
     // ── 快捷键（需窗口为前台，点击画布即可） ──
 
+    /// <summary>注册键盘快捷键：Ctrl+Z 撤销、Ctrl+Y/Ctrl+Shift+Z 重做、Ctrl+Delete 清空、Esc 退出。</summary>
     private void AddAccelerators()
     {
         AddAccelerator(VirtualKey.Z, VirtualKeyModifiers.Control, Undo);
@@ -1460,6 +1513,7 @@ public sealed partial class AnnotationCanvasWindow : Window
             () => ExitRequested?.Invoke());
     }
 
+    /// <summary>注册单条键盘快捷键到根元素。</summary>
     private void AddAccelerator(VirtualKey key, VirtualKeyModifiers modifiers, Action action)
     {
         var accelerator = new KeyboardAccelerator { Key = key, Modifiers = modifiers };
@@ -1473,6 +1527,7 @@ public sealed partial class AnnotationCanvasWindow : Window
 
     // ── 右键菜单：撤销 / 重做 / 清空 ──
 
+    /// <summary>在指定位置弹出右键菜单（撤销 / 重做 / 清空批注）。</summary>
     private void ShowActionMenu(Point position)
     {
         var menu = new MenuFlyout();
@@ -1496,6 +1551,7 @@ public sealed partial class AnnotationCanvasWindow : Window
 
     // ── 进出场：整体淡入 + 工具栏自上而下渐现 ──
 
+    /// <summary>进场动画：整体淡入 + 工具栏从上方向下滑入。</summary>
     private void PlayEnter()
     {
         var visual = ElementCompositionPreview.GetElementVisual(Root);
@@ -1521,6 +1577,7 @@ public sealed partial class AnnotationCanvasWindow : Window
         storyboard.Begin();
     }
 
+    /// <summary>构造一条启用依赖动画的 DoubleAnimation（供 Storyboard 使用）。</summary>
     private static DoubleAnimation BuildAnimation(
         DependencyObject target, string path, double from, double to, double ms,
         EasingFunctionBase ease)

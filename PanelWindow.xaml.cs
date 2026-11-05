@@ -1,6 +1,9 @@
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Windows.Graphics;
+// ── PanelWindow ──
+// 面板卡片窗口：由 BarWindow 控制显隐与位置的 Fluent 2 浅色圆角卡片。
+
 using WinRT.Interop;
 
 namespace ClassDock;
@@ -11,8 +14,10 @@ namespace ClassDock;
 /// </summary>
 public sealed partial class PanelWindow : Window
 {
+    /// <summary>面板是否处于展开状态。</summary>
     public bool IsOpen { get; set; }
 
+    /// <summary>窗口的原生句柄（HWND），用于前台窗口轮询判定焦点归属。</summary>
     public IntPtr Hwnd { get; }
 
     /// <summary>点击“屏幕批注”入口时触发（由 BarWindow 负责切换到批注界面）。</summary>

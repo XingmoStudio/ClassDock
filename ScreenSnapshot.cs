@@ -1,5 +1,8 @@
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.WindowsRuntime;
+// ── ScreenSnapshot ──
+// GDI BitBlt 全屏截图，为批注画布提供背景快照。
+
 using Microsoft.UI.Xaml.Media.Imaging;
 
 namespace ClassDock;

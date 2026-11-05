@@ -1,3 +1,6 @@
+// ── WindowMinSize ──
+// 解除 WinUI 3 桌面窗口最小尺寸限制并移除对话框边框残留。
+
 using System.Runtime.InteropServices;
 
 namespace ClassDock;
@@ -25,6 +28,7 @@ internal static class WindowMinSize
     // 保持委托存活，防止 GC 回收原生回调
     private static readonly SubclassProc Proc = OnWndProc;
 
+    /// <summary>安装子类化钩子，将 ptMinTrackSize 清零以移除最小拖拽尺寸限制。</summary>
     public static void RemoveLimits(IntPtr hwnd) =>
         SetWindowSubclass(hwnd, Proc, UIntPtr.Zero, IntPtr.Zero);
 

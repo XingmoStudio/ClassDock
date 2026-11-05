@@ -1,3 +1,6 @@
+// ── DwmGlass ──
+// DWM 窗口透明与形状控制：玻璃扩展、自动圆角禁用、胶囊区域设定。
+
 using System.Runtime.InteropServices;
 
 namespace ClassDock;
@@ -38,6 +41,8 @@ internal static class DwmGlass
     [DllImport("user32.dll")]
     private static extern int SetWindowRgn(IntPtr hwnd, IntPtr hRgn, bool redraw);
 
+    // ── 窗口形状 ──
+
     /// <summary>
     /// 把窗口区域直接设为胶囊形（两端半圆）。
     /// 比 DWM 圆角偏好可靠：有自定义 region 的窗口 DWM 不再叠加自动圆角，
@@ -51,6 +56,12 @@ internal static class DwmGlass
         SetWindowRgn(hwnd, rgn, true);
     }
 
+    // ── 玻璃扩展 ──
+
+    /// <summary>
+    /// 关闭系统背景策略并将玻璃帧扩展至整个客户区，实现窗口真透明。
+    /// 需配合 XAML 根元素 Background="Transparent" 且不设置 SystemBackdrop。
+    /// </summary>
     public static void Enable(IntPtr hwnd)
     {
         int backdropType = DwmsbtNone;
@@ -59,6 +70,8 @@ internal static class DwmGlass
         var margins = new Margins { Left = -1, Right = -1, Top = -1, Bottom = -1 };
         DwmExtendFrameIntoClientArea(hwnd, ref margins);
     }
+
+    // ── 圆角控制 ──
 
     /// <summary>
     /// 关闭 Win11 DWM 对窗口的自动圆角裁剪。
