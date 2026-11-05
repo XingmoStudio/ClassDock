@@ -36,18 +36,20 @@
                 Margin="0,0,156,0"
                 FontSize="12"
                 Foreground="#99000000"
-                Text="0.0.6.0 (Codename PaintingTheWorld)" />
+                Text="0.0.7.0 (Codename PaintingTheWorld)" />
         </Grid>
 
         <Grid Grid.Row="1">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition x:Name="SidebarColumn" Width="208" />
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
             <!-- 左侧导航 -->
             <Border
+                x:Name="SidebarPanel"
                 Grid.Column="0"
+                Width="208"
                 Background="#FFF3F3F3"
                 BorderBrush="#14000000"
                 BorderThickness="0,0,1,0">
@@ -119,6 +121,11 @@
                                 Tag="blank"
                                 Click="OnNavClick">
                                 <Grid ColumnDefinitions="3,Auto,*">
+                                    <Border
+                                        Width="3"
+                                        Margin="0,5,0,5"
+                                        Background="Transparent"
+                                        CornerRadius="1.5" />
                                     <Viewbox x:Name="HomeIcon" Grid.Column="1" Width="20" Height="20" Margin="7,0,0,0">
                                         <Path
                                             Width="22"
@@ -142,6 +149,11 @@
                                 Style="{StaticResource NavItemStyle}"
                                 Click="OnGeneralGroupClick">
                                 <Grid ColumnDefinitions="3,Auto,*,Auto">
+                                    <Border
+                                        Width="3"
+                                        Margin="0,5,0,5"
+                                        Background="Transparent"
+                                        CornerRadius="1.5" />
                                     <Viewbox x:Name="GeneralIcon" Grid.Column="1" Width="20" Height="20" Margin="7,0,0,0">
                                         <Path
                                             Width="22"
@@ -171,8 +183,13 @@
                                 Margin="26,0,0,0"
                                 Spacing="2">
                                 <Button Style="{StaticResource NavSubItemStyle}" Tag="blank" Click="OnNavClick">
-                                    <Grid ColumnDefinitions="Auto,*">
-                                        <Viewbox Width="20" Height="20">
+                                    <Grid ColumnDefinitions="3,Auto,*">
+                                        <Border
+                                            Width="3"
+                                            Margin="0,5,0,5"
+                                            Background="Transparent"
+                                            CornerRadius="1.5" />
+                                        <Viewbox Grid.Column="1" Width="20" Height="20" Margin="7,0,0,0">
                                             <Path
                                                 Width="22"
                                                 Height="22"
@@ -181,15 +198,20 @@
                                                 Stretch="None" />
                                         </Viewbox>
                                         <TextBlock
-                                            Grid.Column="1"
+                                            Grid.Column="2"
                                             Margin="12,0,0,0"
                                             VerticalAlignment="Center"
                                             Text="基本" />
                                     </Grid>
                                 </Button>
                                 <Button Style="{StaticResource NavSubItemStyle}" Tag="blank" Click="OnNavClick">
-                                    <Grid ColumnDefinitions="Auto,*">
-                                        <Viewbox Width="20" Height="20">
+                                    <Grid ColumnDefinitions="3,Auto,*">
+                                        <Border
+                                            Width="3"
+                                            Margin="0,5,0,5"
+                                            Background="Transparent"
+                                            CornerRadius="1.5" />
+                                        <Viewbox Grid.Column="1" Width="20" Height="20" Margin="7,0,0,0">
                                             <Path
                                                 Width="22"
                                                 Height="22"
@@ -198,15 +220,20 @@
                                                 Stretch="None" />
                                         </Viewbox>
                                         <TextBlock
-                                            Grid.Column="1"
+                                            Grid.Column="2"
                                             Margin="12,0,0,0"
                                             VerticalAlignment="Center"
                                             Text="外观与动画" />
                                     </Grid>
                                 </Button>
                                 <Button Style="{StaticResource NavSubItemStyle}" Tag="blank" Click="OnNavClick">
-                                    <Grid ColumnDefinitions="Auto,*">
-                                        <Viewbox Width="20" Height="20">
+                                    <Grid ColumnDefinitions="3,Auto,*">
+                                        <Border
+                                            Width="3"
+                                            Margin="0,5,0,5"
+                                            Background="Transparent"
+                                            CornerRadius="1.5" />
+                                        <Viewbox Grid.Column="1" Width="20" Height="20" Margin="7,0,0,0">
                                             <Path
                                                 Width="22"
                                                 Height="22"
@@ -215,15 +242,20 @@
                                                 Stretch="None" />
                                         </Viewbox>
                                         <TextBlock
-                                            Grid.Column="1"
+                                            Grid.Column="2"
                                             Margin="12,0,0,0"
                                             VerticalAlignment="Center"
                                             Text="配置与存储" />
                                     </Grid>
                                 </Button>
                                 <Button Style="{StaticResource NavSubItemStyle}" Tag="blank" Click="OnNavClick">
-                                    <Grid ColumnDefinitions="Auto,*">
-                                        <Viewbox Width="20" Height="20">
+                                    <Grid ColumnDefinitions="3,Auto,*">
+                                        <Border
+                                            Width="3"
+                                            Margin="0,5,0,5"
+                                            Background="Transparent"
+                                            CornerRadius="1.5" />
+                                        <Viewbox Grid.Column="1" Width="20" Height="20" Margin="7,0,0,0">
                                             <Path
                                                 Width="22"
                                                 Height="22"
@@ -232,15 +264,20 @@
                                                 Stretch="None" />
                                         </Viewbox>
                                         <TextBlock
-                                            Grid.Column="1"
+                                            Grid.Column="2"
                                             Margin="12,0,0,0"
                                             VerticalAlignment="Center"
                                             Text="安全设置" />
                                     </Grid>
                                 </Button>
                                 <Button Style="{StaticResource NavSubItemStyle}" Tag="blank" Click="OnNavClick">
-                                    <Grid ColumnDefinitions="Auto,*">
-                                        <Viewbox Width="20" Height="20">
+                                    <Grid ColumnDefinitions="3,Auto,*">
+                                        <Border
+                                            Width="3"
+                                            Margin="0,5,0,5"
+                                            Background="Transparent"
+                                            CornerRadius="1.5" />
+                                        <Viewbox Grid.Column="1" Width="20" Height="20" Margin="7,0,0,0">
                                             <Path
                                                 Width="22"
                                                 Height="22"
@@ -249,7 +286,7 @@
                                                 Stretch="None" />
                                         </Viewbox>
                                         <TextBlock
-                                            Grid.Column="1"
+                                            Grid.Column="2"
                                             Margin="12,0,0,0"
                                             VerticalAlignment="Center"
                                             Text="快捷键" />
@@ -263,6 +300,11 @@
                                 Style="{StaticResource NavItemStyle}"
                                 Click="OnToolsGroupClick">
                                 <Grid ColumnDefinitions="3,Auto,*,Auto">
+                                    <Border
+                                        Width="3"
+                                        Margin="0,5,0,5"
+                                        Background="Transparent"
+                                        CornerRadius="1.5" />
                                     <Viewbox x:Name="ToolsIcon" Grid.Column="1" Width="20" Height="20" Margin="7,0,0,0">
                                         <Path
                                             Width="22"
@@ -292,8 +334,13 @@
                                 Margin="26,0,0,0"
                                 Spacing="2">
                                 <Button Style="{StaticResource NavSubItemStyle}" Tag="blank" Click="OnNavClick">
-                                    <Grid ColumnDefinitions="Auto,*">
-                                        <Viewbox Width="20" Height="20">
+                                    <Grid ColumnDefinitions="3,Auto,*">
+                                        <Border
+                                            Width="3"
+                                            Margin="0,5,0,5"
+                                            Background="Transparent"
+                                            CornerRadius="1.5" />
+                                        <Viewbox Grid.Column="1" Width="20" Height="20" Margin="7,0,0,0">
                                             <Path
                                                 Width="22"
                                                 Height="22"
@@ -302,15 +349,20 @@
                                                 Stretch="None" />
                                         </Viewbox>
                                         <TextBlock
-                                            Grid.Column="1"
+                                            Grid.Column="2"
                                             Margin="12,0,0,0"
                                             VerticalAlignment="Center"
                                             Text="批注设置" />
                                     </Grid>
                                 </Button>
                                 <Button Style="{StaticResource NavSubItemStyle}" Tag="blank" Click="OnNavClick">
-                                    <Grid ColumnDefinitions="Auto,*">
-                                        <Viewbox Width="20" Height="20">
+                                    <Grid ColumnDefinitions="3,Auto,*">
+                                        <Border
+                                            Width="3"
+                                            Margin="0,5,0,5"
+                                            Background="Transparent"
+                                            CornerRadius="1.5" />
+                                        <Viewbox Grid.Column="1" Width="20" Height="20" Margin="7,0,0,0">
                                             <Path
                                                 Width="22"
                                                 Height="22"
@@ -319,15 +371,20 @@
                                                 Stretch="None" />
                                         </Viewbox>
                                         <TextBlock
-                                            Grid.Column="1"
+                                            Grid.Column="2"
                                             Margin="12,0,0,0"
                                             VerticalAlignment="Center"
                                             Text="计时器/倒计时" />
                                     </Grid>
                                 </Button>
                                 <Button Style="{StaticResource NavSubItemStyle}" Tag="blank" Click="OnNavClick">
-                                    <Grid ColumnDefinitions="Auto,*">
-                                        <Viewbox Width="20" Height="20">
+                                    <Grid ColumnDefinitions="3,Auto,*">
+                                        <Border
+                                            Width="3"
+                                            Margin="0,5,0,5"
+                                            Background="Transparent"
+                                            CornerRadius="1.5" />
+                                        <Viewbox Grid.Column="1" Width="20" Height="20" Margin="7,0,0,0">
                                             <Path
                                                 Width="22"
                                                 Height="22"
@@ -336,7 +393,7 @@
                                                 Stretch="None" />
                                         </Viewbox>
                                         <TextBlock
-                                            Grid.Column="1"
+                                            Grid.Column="2"
                                             Margin="12,0,0,0"
                                             VerticalAlignment="Center"
                                             Text="联动设置" />
@@ -456,7 +513,7 @@
                                     VerticalAlignment="Center"
                                     FontSize="13"
                                     Foreground="#66000000"
-                                    Text="0.0.6.0 (Codename PaintingTheWorld)" />
+                                    Text="0.0.7.0 (Codename PaintingTheWorld)" />
                             </Grid>
                         </Border>
 
@@ -587,12 +644,17 @@
                                     Checked="OnCrashBehaviorChanged" />
                                 <RadioButton
                                     x:Name="CrashShowError"
-                                    Content="显示错误信息"
+                                    Content="退出并显示错误信息"
                                     GroupName="CrashBehavior"
                                     Checked="OnCrashBehaviorChanged" />
                                 <RadioButton
                                     x:Name="CrashRestart"
                                     Content="静默重启"
+                                    GroupName="CrashBehavior"
+                                    Checked="OnCrashBehaviorChanged" />
+                                <RadioButton
+                                    x:Name="CrashIgnore"
+                                    Content="不处理"
                                     GroupName="CrashBehavior"
                                     Checked="OnCrashBehaviorChanged" />
 
@@ -602,6 +664,38 @@
                                     Foreground="#66000000"
                                     TextWrapping="Wrap"
                                     Text="静默重启会尝试重新启动 ClassDock；若启动阶段反复崩溃，会自动改为静默退出以避免重启循环。" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border
+                            Background="#FFFFFFFF"
+                            BorderBrush="#14000000"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="16,14,16,16">
+                            <StackPanel Spacing="4">
+                                <TextBlock
+                                    FontSize="14"
+                                    FontWeight="SemiBold"
+                                    Text="主动抛出错误测试" />
+
+                                <TextBlock
+                                    Margin="0,2,0,0"
+                                    FontSize="12"
+                                    Foreground="#66000000"
+                                    TextWrapping="Wrap"
+                                    Text="在输入框中键入需要报错的内容，点击按钮后软件将抛出未处理异常，用于验证上方选择的崩溃处理方式是否生效。" />
+
+                                <TextBox
+                                    x:Name="CrashTestInput"
+                                    Margin="0,8,0,0"
+                                    PlaceholderText="输入错误内容（留空则使用默认测试内容）" />
+
+                                <Button
+                                    Margin="0,10,0,0"
+                                    HorizontalAlignment="Left"
+                                    Click="OnThrowTestErrorClick"
+                                    Content="抛出错误" />
                             </StackPanel>
                         </Border>
 

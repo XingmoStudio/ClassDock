@@ -27,13 +27,29 @@ public enum AnnotationTool
     Ruler
 }
 
-/// <summary>笔类型。荧光笔与激光笔暂未开放。</summary>
+/// <summary>笔类型。激光笔暂未开放。</summary>
 public enum PenKind
 {
     Hard,
     Soft,
     Highlighter,
     Laser
+}
+
+/// <summary>几何图形类型。None 表示这是一条普通笔迹而非图形。</summary>
+public enum ShapeKind
+{
+    None,
+    Line,
+    Arrow,
+    DashedArrow,
+    DashedLine,
+    Rectangle,
+    RoundedRectangle,
+    Triangle,
+    RightTriangle,
+    Circle,
+    Ellipse
 }
 
 /// <summary>
@@ -50,12 +66,33 @@ public sealed partial class AnnotationCanvasWindow : Window
 
     private static readonly Color PenColor = Color.FromArgb(0xFF, 0xE8, 0x11, 0x23);
 
+    /// <summary>强调色画刷均为共享实例：RefreshAccent 只改 Color 即全局生效，无需重建引用。</summary>
     private static readonly SolidColorBrush AccentBrush
-        = new(Color.FromArgb(0xFF, 0x00, 0x78, 0xD4));
+        = new(PenColor);
     private static readonly SolidColorBrush NormalBrush
         = new(Color.FromArgb(0xFF, 0x2B, 0x2B, 0x2B));
     private static readonly SolidColorBrush SwatchBorderBrush
         = new(Color.FromArgb(0x1F, 0x00, 0x00, 0x00));
+
+    /// <summary>主题/个性化系统接口：设置后强调色固定为主题色；恢复为 null 则重新跟随画笔颜色。</summary>
+    public Color? ThemeAccent
+    {
+        get => _themeAccent;
+        set
+        {
+            _themeAccent = value;
+            RefreshAccent();
+        }
+    }
+    private Color? _themeAccent;
+
+    /// <summary>当前强调色：主题色优先，否则跟随画笔颜色。</summary>
+    private Color AccentColor => _themeAccent ?? _penColor;
+
+    // 工具按钮选中态的底色画刷（取自 XAML 资源，共享实例）
+    private readonly SolidColorBrush _toolCheckedBrush;
+    private readonly SolidColorBrush _toolCheckedHoverBrush;
+    private readonly SolidColorBrush _toolCheckedPressedBrush;
 
     private readonly List<InkStroke> _strokes = [];
     private readonly Stack<EditAction> _undo = [];
@@ -68,12 +105,16 @@ public sealed partial class AnnotationCanvasWindow : Window
     private readonly List<InkStroke> _eraseFragments = [];
 
     private InkStroke? _current;
+    private InkStroke? _shapeDraft;
+    private Point _shapeStart;
     private AnnotationTool _tool = AnnotationTool.Pen;
     private bool _erasing;
     private uint _activePointerId;
     private Color _penColor = PenColor;
     private double _penThickness = PenThickness;
     private PenKind _penKind = PenKind.Hard;
+    private ShapeKind _shapeKind = ShapeKind.Line;
+    private double _shapeThickness = 3;
 
     /// <summary>一条笔迹：渲染元素 + 采样点与每点半宽（橡皮命中、撤销重做、软笔笔锋重建都用它）。</summary>
     private sealed class InkStroke
@@ -86,6 +127,9 @@ public sealed partial class AnnotationCanvasWindow : Window
         public required double BaseThickness { get; init; }
         public required PenKind Kind { get; init; }
         public required Color Color { get; init; }
+
+        /// <summary>图形类型；普通笔迹为 None。虚线类图形擦断后的片段靠它保持虚线样式。</summary>
+        public ShapeKind Shape { get; init; } = ShapeKind.None;
     }
 
     /// <summary>一次可撤销的编辑，撤销与重做各自维护画布状态。</summary>
@@ -127,10 +171,16 @@ public sealed partial class AnnotationCanvasWindow : Window
         AppWindow.IsShownInSwitchers = false;
 
         Root.Loaded += (_, _) => PlayEnter();
+        _toolCheckedBrush = (SolidColorBrush)Root.Resources["ToolCheckedBrush"];
+        _toolCheckedHoverBrush = (SolidColorBrush)Root.Resources["ToolCheckedHoverBrush"];
+        _toolCheckedPressedBrush = (SolidColorBrush)Root.Resources["ToolCheckedPressedBrush"];
         IconOf(PenButton).Fill = AccentBrush;
+        RefreshAccent();
         UpdateThicknessVisuals();
         UpdateSwatchSelection();
         UpdateEraserSizeVisuals();
+        UpdateShapeOptionVisuals();
+        UpdateShapeThicknessVisuals();
         AddAccelerators();
     }
 
@@ -166,7 +216,7 @@ public sealed partial class AnnotationCanvasWindow : Window
         var element = source as DependencyObject;
         while (element is not null)
         {
-            if (element is FrameworkElement { Name: "PenPanel" or "EraserPanel" or "Card" }) return true;
+            if (element is FrameworkElement { Name: "PenPanel" or "EraserPanel" or "ShapesPanel" or "Card" }) return true;
             element = VisualTreeHelper.GetParent(element);
         }
         return false;
@@ -209,6 +259,7 @@ public sealed partial class AnnotationCanvasWindow : Window
             // 该工具已选中时再点一次 → 弹出/收起对应的设置面板
             if (tool == AnnotationTool.Pen) TogglePenPanel();
             else if (tool == AnnotationTool.Eraser) ToggleEraserPanel();
+            else if (tool == AnnotationTool.Shapes) ToggleShapesPanel();
             return;
         }
         FinishStroke();
@@ -217,9 +268,10 @@ public sealed partial class AnnotationCanvasWindow : Window
         // 切走对应工具时收起它的设置面板
         if (tool != AnnotationTool.Pen) HidePenPanel();
         if (tool != AnnotationTool.Eraser) HideEraserPanel();
+        if (tool != AnnotationTool.Shapes) HideShapesPanel();
     }
 
-    // ── 设置面板（画笔 / 橡皮）：都从右侧工具栏向左滑入，再向右收起 ──
+    // ── 设置面板（画笔 / 橡皮 / 几何图形）：都从右侧工具栏向左滑入，再向右收起 ──
 
     private const double PanelSlideDistance = 48;
     private readonly HashSet<Border> _closingPanels = [];
@@ -241,6 +293,14 @@ public sealed partial class AnnotationCanvasWindow : Window
     }
 
     private void HideEraserPanel() => HideSlidePanel(EraserPanel);
+
+    private void ToggleShapesPanel()
+    {
+        if (ShapesPanel.Visibility == Visibility.Visible && !_closingPanels.Contains(ShapesPanel)) HideShapesPanel();
+        else ShowSlidePanel(ShapesPanel);
+    }
+
+    private void HideShapesPanel() => HideSlidePanel(ShapesPanel);
 
     /// <summary>从右侧滑出：面板贴右侧工具栏，向左位移归位并淡入。</summary>
     private void ShowSlidePanel(Border panel)
@@ -307,11 +367,74 @@ public sealed partial class AnnotationCanvasWindow : Window
         EraserImage.Height = EraserVisualSize;
     }
 
+    // ── 几何图形设置面板：图形选择 + 三档粗细 ──
+
+    private static readonly SolidColorBrush ShapeActiveBrush = new(Color.FromArgb(0x16, 0x00, 0x78, 0xD4));
+    private static readonly SolidColorBrush TransparentBrush = new(Color.FromArgb(0, 0, 0, 0));
+
+    private void OnShapeOptionPressed(object sender, PointerRoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: string tag }
+            || !Enum.TryParse(tag, out ShapeKind kind)) return;
+        _shapeKind = kind;
+        UpdateShapeOptionVisuals();
+    }
+
+    private void OnShapeThicknessPressed(object sender, PointerRoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: string tag }
+            || !double.TryParse(tag, out double thickness)) return;
+        _shapeThickness = thickness;
+        UpdateShapeThicknessVisuals();
+    }
+
+    /// <summary>选中的图形图标着主题蓝、底色淡蓝，其余恢复常态。</summary>
+    private void UpdateShapeOptionVisuals()
+    {
+        if (ShapeRow1 is null) return;
+        foreach (var row in new[] { ShapeRow1, ShapeRow2 })
+        {
+            foreach (var child in row.Children)
+            {
+                if (child is not Border { Tag: string tag } option) continue;
+                bool active = Enum.TryParse(tag, out ShapeKind kind) && kind == _shapeKind;
+                option.Background = active ? ShapeActiveBrush : TransparentBrush;
+                if (option.Child is Path icon) icon.Stroke = active ? AccentBrush : NormalBrush;
+            }
+        }
+    }
+
+    private void UpdateShapeThicknessVisuals()
+    {
+        if (ShapeThicknessRow is null) return;
+        foreach (var child in ShapeThicknessRow.Children)
+        {
+            if (child is not Border { Tag: string tag } preset) continue;
+            bool active = double.TryParse(tag, out double t) && Math.Abs(t - _shapeThickness) < 0.01;
+            preset.Background = active ? ShapeActiveBrush : TransparentBrush;
+        }
+    }
+
     private void OnPenColorChanged(ColorPicker sender, ColorChangedEventArgs args)
     {
         _penColor = args.NewColor;
+        RefreshAccent();
         UpdateSwatchSelection();
     }
+
+    /// <summary>强调色（默认跟随画笔颜色）刷新所有共用画刷；画刷是共享实例，改 Color 即全局生效。</summary>
+    private void RefreshAccent()
+    {
+        Color accent = AccentColor;
+        AccentBrush.Color = accent;
+        ShapeActiveBrush.Color = WithAlpha(accent, 0x16);
+        _toolCheckedBrush.Color = WithAlpha(accent, 0x16);
+        _toolCheckedHoverBrush.Color = WithAlpha(accent, 0x24);
+        _toolCheckedPressedBrush.Color = WithAlpha(accent, 0x32);
+    }
+
+    /// <summary>保留透明度、替换 RGB，用于由强调色派生各档选中态底色。</summary>
+    private static Color WithAlpha(Color color, byte alpha) => Color.FromArgb(alpha, color.R, color.G, color.B);
 
     private void OnThicknessChanged(object sender, RangeBaseValueChangedEventArgs e)
     {
@@ -430,6 +553,7 @@ public sealed partial class AnnotationCanvasWindow : Window
         {
             _penColor = ParseHex(hex);
             if (_colorPicker is not null) _colorPicker.Color = _penColor;
+            RefreshAccent();
             UpdateSwatchSelection();
             e.Handled = true;
         }
@@ -509,8 +633,250 @@ public sealed partial class AnnotationCanvasWindow : Window
                 _current = BeginStroke(position);
                 break;
 
-            // 几何图形 / 尺规：本阶段占位，不响应绘制
+            case AnnotationTool.Shapes:
+                _shapeStart = position;
+                _shapeDraft = BeginShapeDraft(position);
+                break;
+
+            // 尺规：本阶段占位，不响应绘制
         }
+    }
+
+    /// <summary>新建一条几何图形草稿：先挂预览，松手时才入栈提交。
+    /// 所有图形统一渲染为“密化轮廓点”的折线，橡皮的逐点命中判定与切割直接复用。</summary>
+    private InkStroke BeginShapeDraft(Point p)
+    {
+        var line = new Polyline
+        {
+            Stroke = new SolidColorBrush(_penColor),
+            StrokeThickness = _shapeThickness,
+            StrokeLineJoin = PenLineJoin.Round,
+            StrokeStartLineCap = PenLineCap.Round,
+            StrokeEndLineCap = PenLineCap.Round,
+            IsHitTestVisible = false
+        };
+        if (_shapeKind is ShapeKind.DashedArrow or ShapeKind.DashedLine)
+        {
+            line.StrokeDashArray = new DoubleCollection { 3, 2 };
+        }
+        line.Points.Add(p);
+
+        var draft = new InkStroke
+        {
+            Visual = line,
+            BaseThickness = _shapeThickness,
+            Kind = PenKind.Hard,
+            Color = _penColor,
+            Shape = _shapeKind
+        };
+        draft.Points.Add(p);
+
+        InkLayer.Children.Add(line);
+        return draft;
+    }
+
+    /// <summary>拖动时按当前图形类型重建轮廓点并刷新预览。</summary>
+    private void UpdateShapeDraft(Point end)
+    {
+        var draft = _shapeDraft!;
+        var line = (Polyline)draft.Visual;
+
+        var points = BuildShapePoints(_shapeKind, _shapeStart, end);
+        draft.Points.Clear();
+        draft.Points.AddRange(points);
+        line.Points.Clear();
+        foreach (var p in points) line.Points.Add(p);
+    }
+
+    // ── 图形轮廓点生成：相邻点间距 ≤ ShapeSampleStep，保证橡皮命中判定准确 ──
+
+    private const double ShapeSampleStep = 6;
+
+    private static List<Point> BuildShapePoints(ShapeKind kind, Point a, Point b)
+    {
+        switch (kind)
+        {
+            case ShapeKind.Arrow:
+            case ShapeKind.DashedArrow:
+                return AppendHead(DensifySegment(a, b), a, b);
+
+            case ShapeKind.Rectangle:
+            {
+                ShapeBounds(a, b, out double x1, out double y1, out double x2, out double y2);
+                return DensifyPath(
+                    new[] { new Point(x1, y1), new Point(x2, y1), new Point(x2, y2), new Point(x1, y2) }, closed: true);
+            }
+
+            case ShapeKind.RoundedRectangle:
+            {
+                ShapeBounds(a, b, out double x1, out double y1, out double x2, out double y2);
+                return RoundedRectPoints(x1, y1, x2, y2);
+            }
+
+            case ShapeKind.Triangle:
+            {
+                ShapeBounds(a, b, out double x1, out double y1, out double x2, out double y2);
+                return DensifyPath(
+                    new[] { new Point((x1 + x2) / 2, y1), new Point(x2, y2), new Point(x1, y2) }, closed: true);
+            }
+
+            case ShapeKind.RightTriangle:
+            {
+                ShapeBounds(a, b, out double x1, out double y1, out double x2, out double y2);
+                return DensifyPath(
+                    new[] { new Point(x1, y1), new Point(x1, y2), new Point(x2, y2) }, closed: true);
+            }
+
+            case ShapeKind.Circle:
+            {
+                double r = Distance(a, b);
+                return EllipsePoints(a, r, r);
+            }
+
+            case ShapeKind.Ellipse:
+            {
+                var center = new Point((a.X + b.X) / 2, (a.Y + b.Y) / 2);
+                return EllipsePoints(center, Math.Abs(b.X - a.X) / 2, Math.Abs(b.Y - a.Y) / 2);
+            }
+
+            default: // Line
+                return DensifySegment(a, b);
+        }
+    }
+
+    private static void ShapeBounds(Point a, Point b, out double x1, out double y1, out double x2, out double y2)
+    {
+        x1 = Math.Min(a.X, b.X); y1 = Math.Min(a.Y, b.Y);
+        x2 = Math.Max(a.X, b.X); y2 = Math.Max(a.Y, b.Y);
+    }
+
+    /// <summary>把一段直线密化成间距 ≤ 6px 的点列（含两端点）。</summary>
+    private static List<Point> DensifySegment(Point a, Point b)
+    {
+        var points = new List<Point> { a };
+        double length = Distance(a, b);
+        int steps = (int)(length / ShapeSampleStep);
+        for (int i = 1; i <= steps; i++)
+        {
+            double t = (double)i / (steps + 1);
+            points.Add(new Point(a.X + (b.X - a.X) * t, a.Y + (b.Y - a.Y) * t));
+        }
+        points.Add(b);
+        return points;
+    }
+
+    /// <summary>把顶点序列的每条边密化；closed 时末尾回到起点闭合。</summary>
+    private static List<Point> DensifyPath(IReadOnlyList<Point> vertices, bool closed)
+    {
+        var points = new List<Point>();
+        for (int i = 0; i < vertices.Count - 1; i++)
+        {
+            var segment = DensifySegment(vertices[i], vertices[i + 1]);
+            segment.RemoveAt(segment.Count - 1);
+            points.AddRange(segment);
+        }
+        if (closed)
+        {
+            points.AddRange(DensifySegment(vertices[^1], vertices[0]));
+        }
+        else
+        {
+            points.Add(vertices[^1]);
+        }
+        return points;
+    }
+
+    /// <summary>给线段末尾补上箭头两翼（翼长随杆身长度在 8~16 间伸缩）。</summary>
+    private static List<Point> AppendHead(List<Point> shaft, Point a, Point b)
+    {
+        shaft.Add(WingPoint(b, a, 25));
+        shaft.Add(b);
+        shaft.Add(WingPoint(b, a, -25));
+        return shaft;
+    }
+
+    /// <summary>箭头一翼的端点：tip 为箭尖，from 决定朝向，angle 为相对箭杆的偏角。</summary>
+    private static Point WingPoint(Point tip, Point from, double angleDeg)
+    {
+        var dir = Unit(from, tip);
+        double length = Math.Clamp(Distance(from, tip) * 0.3, 8, 16);
+        double angle = angleDeg * Math.PI / 180;
+        double cos = Math.Cos(angle), sin = Math.Sin(angle);
+        double bx = -dir.X, by = -dir.Y;
+        return new Point(
+            tip.X + (bx * cos - by * sin) * length,
+            tip.Y + (bx * sin + by * cos) * length);
+    }
+
+    /// <summary>圆角矩形轮廓：四个 90° 圆角圆弧 + 直边密化，半径随尺寸自适应（≤10）。</summary>
+    private static List<Point> RoundedRectPoints(double x1, double y1, double x2, double y2)
+    {
+        double r = Math.Min(10, Math.Min(x2 - x1, y2 - y1) / 2);
+        if (r < 0.5)
+        {
+            return DensifyPath(
+                new[] { new Point(x1, y1), new Point(x2, y1), new Point(x2, y2), new Point(x1, y2) }, closed: true);
+        }
+
+        var corners = new List<Point>();
+        AddArc(corners, new Point(x2 - r, y1 + r), r, -90, 0);
+        AddArc(corners, new Point(x2 - r, y2 - r), r, 0, 90);
+        AddArc(corners, new Point(x1 + r, y2 - r), r, 90, 180);
+        AddArc(corners, new Point(x1 + r, y1 + r), r, 180, 270);
+        corners.Add(corners[0]);
+        return EnsureDensity(corners);
+    }
+
+    private static void AddArc(List<Point> points, Point center, double r, double fromDeg, double toDeg)
+    {
+        for (int i = 0; i <= 6; i++)
+        {
+            double t = (fromDeg + (toDeg - fromDeg) * i / 6) * Math.PI / 180;
+            points.Add(new Point(center.X + r * Math.Cos(t), center.Y + r * Math.Sin(t)));
+        }
+    }
+
+    /// <summary>椭圆轮廓：按拉马努金近似周长决定采样数，首尾重合闭合。</summary>
+    private static List<Point> EllipsePoints(Point center, double rx, double ry)
+    {
+        rx = Math.Max(rx, 0.5);
+        ry = Math.Max(ry, 0.5);
+        double circumference = Math.PI * (3 * (rx + ry) - Math.Sqrt((3 * rx + ry) * (rx + 3 * ry)));
+        int n = Math.Max(24, (int)(circumference / ShapeSampleStep));
+        var points = new List<Point>(n + 1);
+        for (int i = 0; i <= n; i++)
+        {
+            double t = 2 * Math.PI * i / n;
+            points.Add(new Point(center.X + rx * Math.Cos(t), center.Y + ry * Math.Sin(t)));
+        }
+        return points;
+    }
+
+    /// <summary>对已闭合的轮廓点列，把间距超标的相邻点之间补密化（圆角弧之间的直边）。</summary>
+    private static List<Point> EnsureDensity(List<Point> points)
+    {
+        var result = new List<Point>();
+        for (int i = 0; i < points.Count - 1; i++)
+        {
+            var segment = DensifySegment(points[i], points[i + 1]);
+            segment.RemoveAt(segment.Count - 1);
+            result.AddRange(segment);
+        }
+        result.Add(points[^1]);
+        return result;
+    }
+
+    /// <summary>图形草稿的包围盒最长边，用于判断“太短视为误触”（闭合图形首尾重合不能用端点距离）。</summary>
+    private static double ShapeExtent(InkStroke draft)
+    {
+        double x1 = double.MaxValue, y1 = double.MaxValue;
+        double x2 = double.MinValue, y2 = double.MinValue;
+        foreach (var p in draft.Points)
+        {
+            x1 = Math.Min(x1, p.X); y1 = Math.Min(y1, p.Y);
+            x2 = Math.Max(x2, p.X); y2 = Math.Max(y2, p.Y);
+        }
+        return Math.Max(x2 - x1, y2 - y1);
     }
 
     /// <summary>新建一条笔迹。软笔用填充多边形（宽度逐点变化形成笔锋），
@@ -798,6 +1164,12 @@ public sealed partial class AnnotationCanvasWindow : Window
             return;
         }
 
+        if (_shapeDraft is not null)
+        {
+            UpdateShapeDraft(p);
+            return;
+        }
+
         if (_current is null) return;
         var last = _current.Points[^1];
         // 过滤抖动：采样点间距过小会让法线方向乱跳，轮廓更容易自交
@@ -822,9 +1194,29 @@ public sealed partial class AnnotationCanvasWindow : Window
         FinishStroke();
     }
 
-    /// <summary>结束当前笔迹；点一下不拖则补一个极短线段，让它显示为圆点。软笔此时收笔出锋。</summary>
+    /// <summary>结束当前笔迹；点一下不拖则补一个极短线段，让它显示为圆点。软笔此时收笔出锋。
+    /// 几何图形草稿在此提交：太短视为误触直接丢弃，否则作为一条可撤销的笔迹入栈。</summary>
     private void FinishStroke()
     {
+        if (_shapeDraft is not null)
+        {
+            var draft = _shapeDraft;
+            _shapeDraft = null;
+
+            if (ShapeExtent(draft) < 3)
+            {
+                InkLayer.Children.Remove(draft.Visual);
+            }
+            else
+            {
+                _strokes.Add(draft);
+                _redo.Clear();
+                _undo.Push(new EditAction(
+                    () => DetachStroke(draft),
+                    () => AttachStroke(draft)));
+            }
+        }
+
         if (_current is not null)
         {
             if (_current.Points.Count == 1)
@@ -961,13 +1353,19 @@ public sealed partial class AnnotationCanvasWindow : Window
             Visual = visual,
             BaseThickness = source.BaseThickness,
             Kind = source.Kind,
-            Color = source.Color
+            Color = source.Color,
+            Shape = source.Shape
         };
         fragment.Points.AddRange(points);
         fragment.HalfWidths.AddRange(halfWidths);
 
         if (visual is Polyline line)
         {
+            // 虚线类图形的片段保持虚线样式
+            if (source.Shape is ShapeKind.DashedArrow or ShapeKind.DashedLine)
+            {
+                line.StrokeDashArray = new DoubleCollection { 3, 2 };
+            }
             foreach (var p in points) line.Points.Add(p);
         }
         else

@@ -14,7 +14,9 @@ public enum CrashBehavior
 {
     SilentExit,
     ShowError,
-    SilentRestart
+    SilentRestart,
+    /// <summary>不提示也不退出，完全忽略错误（风险极高）。</summary>
+    Ignore
 }
 
 /// <summary>应用级设置的持久化，存于 %LOCALAPPDATA%\ClassDock\settings.json。</summary>
@@ -87,6 +89,12 @@ public partial class App : Application
         e.Handled = true;
         LogError(e.Exception);
 
+        if (AppSettings.CrashBehavior == CrashBehavior.Ignore)
+        {
+            // 不处理：不提示也不退出，仅静默落盘
+            return;
+        }
+
         if (AppSettings.CrashBehavior == CrashBehavior.SilentRestart)
         {
             Restart();
@@ -149,7 +157,7 @@ public partial class App : Application
         Environment.Exit(1);
     }
 
-    /// <summary>用 WinUI 3 的 ContentDialog 展示异常详情；由独立小窗口提供 XamlRoot。</summary>
+    /// <summary>用 WinUI 3 的 ContentDialog 展示异常详情；由独立小窗口提供 XamlRoot。弹窗关闭后终止进程。</summary>
     private void ShowErrorDialog(Exception? ex)
     {
         if (_errorDialogOpen) return;
@@ -187,12 +195,13 @@ public partial class App : Application
 
                 await dialog.ShowAsync();
                 window.Close();
-                _errorDialogOpen = false;
+                Environment.Exit(1);
             };
         }
         catch
         {
-            _errorDialogOpen = false;
+            // 弹窗失败也要保证进程终止
+            Environment.Exit(1);
         }
     }
 

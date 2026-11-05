@@ -30,6 +30,7 @@ public sealed partial class SettingsWindow : Window
 
     // 侧边栏收起状态与两个分组的展开状态
     private bool _collapsed;
+    private bool _sidebarBusy;
     private bool _generalExpanded = true;
     private bool _toolsExpanded = true;
 
@@ -83,15 +84,19 @@ public sealed partial class SettingsWindow : Window
     private void OnNavClick(object sender, RoutedEventArgs e)
     {
         var button = (Button)sender;
-        var tag = button.Tag as string ?? "blank";
+        ShowPage(button.Tag as string ?? "blank");
+        SelectNav(button, FindAccentBorder(button));
+    }
 
-        ShowPage(tag);
-        SelectNav(button, tag switch
+    /// <summary>导航项内容栅格中 3px 宽的 Border 即选中态竖条。</summary>
+    private static Border? FindAccentBorder(Button button)
+    {
+        if (button.Content is not Grid grid) return null;
+        foreach (var child in grid.Children)
         {
-            "about" => AboutAccent,
-            "debug" => DebugAccent,
-            _ => null
-        });
+            if (child is Border border && border.Width == 3) return border;
+        }
+        return null;
     }
 
     /// <summary>切换右侧内容页；未开放的页面保持空白。</summary>
@@ -116,61 +121,155 @@ public sealed partial class SettingsWindow : Window
 
     private void OnGeneralGroupClick(object sender, RoutedEventArgs e)
     {
-        if (_collapsed) return; // 收起态下不展开二级菜单
+        if (_collapsed || _sidebarBusy) return; // 收起态下不展开二级菜单
         _generalExpanded = !_generalExpanded;
-        ApplySidebarState();
+        ApplyGroupState();
     }
 
     private void OnToolsGroupClick(object sender, RoutedEventArgs e)
     {
-        if (_collapsed) return;
+        if (_collapsed || _sidebarBusy) return;
         _toolsExpanded = !_toolsExpanded;
-        ApplySidebarState();
+        ApplyGroupState();
     }
 
-    /// <summary>汉堡键：收起/展开侧边栏。收起后仅显示一级菜单图标列。</summary>
-    private void OnCollapseToggleClick(object sender, RoutedEventArgs e)
+    /// <summary>子菜单可见性与分组箭头（无动画，供展开/收起分组时调用）。</summary>
+    private void ApplyGroupState()
     {
-        _collapsed = !_collapsed;
-        ApplySidebarState();
-    }
-
-    private void ApplySidebarState()
-    {
-        SidebarColumn.Width = new GridLength(_collapsed ? 52 : 208);
-        HeaderBar.Margin = _collapsed ? HeaderMarginCollapsed : HeaderMarginExpanded;
-
-        var textVisibility = _collapsed ? Visibility.Collapsed : Visibility.Visible;
-        SettingsTitle.Visibility = textVisibility;
-        AboutText.Visibility = textVisibility;
-        HomeText.Visibility = textVisibility;
-        GeneralText.Visibility = textVisibility;
-        ToolsText.Visibility = textVisibility;
-        DebugText.Visibility = textVisibility;
-        ExitText.Visibility = textVisibility;
-        GeneralChevron.Visibility = textVisibility;
-        ToolsChevron.Visibility = textVisibility;
-
         GeneralChildren.Visibility = !_collapsed && _generalExpanded ? Visibility.Visible : Visibility.Collapsed;
         ToolsChildren.Visibility = !_collapsed && _toolsExpanded ? Visibility.Visible : Visibility.Collapsed;
         GeneralChevron.Glyph = _generalExpanded ? "\uE70D" : "\uE70E";
         ToolsChevron.Glyph = _toolsExpanded ? "\uE70D" : "\uE70E";
+    }
 
-        var iconMargin = _collapsed ? IconMarginCollapsed : IconMarginExpanded;
+    /// <summary>汉堡键：收起/展开侧边栏，附带宽度渐变与文字淡入淡出动画。</summary>
+    private async void OnCollapseToggleClick(object sender, RoutedEventArgs e)
+    {
+        if (_sidebarBusy) return;
+        _sidebarBusy = true;
+        _collapsed = !_collapsed;
+
+        if (_collapsed)
+        {
+            // 先收起子菜单并淡出文字，再收缩宽度
+            GeneralChildren.Visibility = Visibility.Collapsed;
+            ToolsChildren.Visibility = Visibility.Collapsed;
+            await FadeSidebarTextAsync(0, 90);
+            SetTextVisibility(Visibility.Collapsed);
+            HeaderBar.Margin = HeaderMarginCollapsed;
+            ApplyIconLayout(collapsed: true);
+            await AnimateSidebarWidthAsync(52, 170);
+        }
+        else
+        {
+            // 先展开宽度，再恢复图标布局与文字，避免内容在过窄时被挤压
+            await AnimateSidebarWidthAsync(208, 170);
+            HeaderBar.Margin = HeaderMarginExpanded;
+            ApplyIconLayout(collapsed: false);
+            SetTextOpacity(0);
+            SetTextVisibility(Visibility.Visible);
+            ApplyGroupState();
+            await FadeSidebarTextAsync(1, 130);
+        }
+
+        _sidebarBusy = false;
+    }
+
+    /// <summary>图标边距与各导航项内边距（静态部分，不做动画）。</summary>
+    private void ApplyIconLayout(bool collapsed)
+    {
+        var iconMargin = collapsed ? IconMarginCollapsed : IconMarginExpanded;
         AboutIcon.Margin = iconMargin;
         HomeIcon.Margin = iconMargin;
         GeneralIcon.Margin = iconMargin;
         ToolsIcon.Margin = iconMargin;
         DebugIcon.Margin = iconMargin;
 
-        var padding = _collapsed ? NavPaddingCollapsed : NavPadding;
+        var padding = collapsed ? NavPaddingCollapsed : NavPadding;
         NavAbout.Padding = padding;
         NavHome.Padding = padding;
         NavGeneral.Padding = padding;
         NavTools.Padding = padding;
         NavDebug.Padding = padding;
         ExitButton.Padding = padding;
-        ExitIcon.Margin = _collapsed ? new Thickness(11, 0, 0, 0) : new Thickness(0);
+        ExitIcon.Margin = collapsed ? new Thickness(11, 0, 0, 0) : new Thickness(0);
+    }
+
+    private void SetTextVisibility(Visibility visibility)
+    {
+        SettingsTitle.Visibility = visibility;
+        AboutText.Visibility = visibility;
+        HomeText.Visibility = visibility;
+        GeneralText.Visibility = visibility;
+        ToolsText.Visibility = visibility;
+        DebugText.Visibility = visibility;
+        ExitText.Visibility = visibility;
+        GeneralChevron.Visibility = visibility;
+        ToolsChevron.Visibility = visibility;
+    }
+
+    private void SetTextOpacity(double opacity)
+    {
+        SettingsTitle.Opacity = opacity;
+        AboutText.Opacity = opacity;
+        HomeText.Opacity = opacity;
+        GeneralText.Opacity = opacity;
+        ToolsText.Opacity = opacity;
+        DebugText.Opacity = opacity;
+        ExitText.Opacity = opacity;
+        GeneralChevron.Opacity = opacity;
+        ToolsChevron.Opacity = opacity;
+    }
+
+    /// <summary>侧边栏宽度渐变（Border 的 Width 可直接用 Storyboard 动画）。</summary>
+    private Task AnimateSidebarWidthAsync(double to, double ms)
+    {
+        var anim = new Microsoft.UI.Xaml.Media.Animation.DoubleAnimation
+        {
+            From = SidebarPanel.Width,
+            To = to,
+            Duration = TimeSpan.FromMilliseconds(ms),
+            // Width 属于影响布局的依赖动画，不开启会被静默跳过
+            EnableDependentAnimation = true,
+            EasingFunction = new Microsoft.UI.Xaml.Media.Animation.CubicEase
+            {
+                EasingMode = Microsoft.UI.Xaml.Media.Animation.EasingMode.EaseOut
+            }
+        };
+        Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTarget(anim, SidebarPanel);
+        Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTargetProperty(anim, "Width");
+
+        var sb = new Microsoft.UI.Xaml.Media.Animation.Storyboard();
+        sb.Children.Add(anim);
+        var tcs = new TaskCompletionSource();
+        sb.Completed += (_, _) => tcs.SetResult();
+        sb.Begin();
+        return tcs.Task;
+    }
+
+    /// <summary>标题/导航文字/箭头的整体淡入淡出。</summary>
+    private Task FadeSidebarTextAsync(double to, double ms)
+    {
+        var sb = new Microsoft.UI.Xaml.Media.Animation.Storyboard();
+        foreach (var element in new UIElement[]
+        {
+            SettingsTitle, AboutText, HomeText, GeneralText, ToolsText,
+            DebugText, ExitText, GeneralChevron, ToolsChevron
+        })
+        {
+            var anim = new Microsoft.UI.Xaml.Media.Animation.DoubleAnimation
+            {
+                To = to,
+                Duration = TimeSpan.FromMilliseconds(ms)
+            };
+            Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTarget(anim, element);
+            Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTargetProperty(anim, "Opacity");
+            sb.Children.Add(anim);
+        }
+        var tcs = new TaskCompletionSource();
+        sb.Completed += (_, _) => tcs.SetResult();
+        sb.Begin();
+        return tcs.Task;
     }
 
     private void LoadCrashBehavior()
@@ -184,6 +283,9 @@ public sealed partial class SettingsWindow : Window
             case CrashBehavior.SilentRestart:
                 CrashRestart.IsChecked = true;
                 break;
+            case CrashBehavior.Ignore:
+                CrashIgnore.IsChecked = true;
+                break;
             default:
                 CrashShowError.IsChecked = true;
                 break;
@@ -191,14 +293,52 @@ public sealed partial class SettingsWindow : Window
         _loadingSettings = false;
     }
 
-    private void OnCrashBehaviorChanged(object sender, RoutedEventArgs e)
+    private async void OnCrashBehaviorChanged(object sender, RoutedEventArgs e)
     {
         if (_loadingSettings) return;
+
+        if (ReferenceEquals(sender, CrashIgnore))
+        {
+            var dialog = new ContentDialog
+            {
+                XamlRoot = Content.XamlRoot,
+                Title = "确认选择「不处理」？",
+                PrimaryButtonText = "确认选择",
+                CloseButtonText = "取消",
+                DefaultButton = ContentDialogButton.Close,
+                Content = new TextBlock
+                {
+                    TextWrapping = TextWrapping.Wrap,
+                    Text = "选择后，应用发生任何错误时都不会提示、也不会退出，错误将被完全忽略。"
+                        + "\n\n此选项风险性极高：应用可能在已损坏的状态下继续运行，导致功能异常、数据错误或其他无法预料的行为，且不会有任何反馈，问题将难以排查。"
+                        + "\n\n确定要这样处理错误吗？"
+                }
+            };
+
+            if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+            {
+                // 取消：还原为当前生效的处理方式
+                LoadCrashBehavior();
+                return;
+            }
+
+            AppSettings.CrashBehavior = CrashBehavior.Ignore;
+            AppSettings.Save();
+            return;
+        }
 
         AppSettings.CrashBehavior = ReferenceEquals(sender, CrashSilentExit) ? CrashBehavior.SilentExit
             : ReferenceEquals(sender, CrashRestart) ? CrashBehavior.SilentRestart
             : CrashBehavior.ShowError;
         AppSettings.Save();
+    }
+
+    /// <summary>主动抛出未处理异常，验证崩溃处理方式是否按预期生效。</summary>
+    private void OnThrowTestErrorClick(object sender, RoutedEventArgs e)
+    {
+        var message = CrashTestInput.Text.Trim();
+        if (message.Length == 0) message = "这是一条主动抛出的测试错误。";
+        throw new InvalidOperationException(message);
     }
 
     private void OnNavExitClick(object sender, RoutedEventArgs e)

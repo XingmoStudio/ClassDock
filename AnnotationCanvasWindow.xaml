@@ -500,6 +500,85 @@
             </StackPanel>
         </Border>
 
+        <!-- 几何图形设置面板（浅色）：两行图形选择 + 三档粗细。
+             几何图形已选中时再点一次按钮弹出/收起 -->
+        <Border
+            x:Name="ShapesPanel"
+            Margin="0,0,80,0"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Center"
+            Background="#FFFFFFFF"
+            BorderBrush="#1A000000"
+            BorderThickness="1"
+            CornerRadius="12"
+            Padding="14"
+            Visibility="Collapsed"
+            PointerPressed="OnCardPressed">
+            <StackPanel Spacing="8">
+                <!-- 第一行：矩形 / 三角形 / 直线 / 箭头 / 圆形 -->
+                <StackPanel x:Name="ShapeRow1" Orientation="Horizontal" Spacing="4">
+                    <Border Width="32" Height="32" Background="Transparent" CornerRadius="8" PointerPressed="OnShapeOptionPressed" Tag="Rectangle" ToolTipService.ToolTip="矩形">
+                        <Path Width="20" Height="20" Data="M4.5 5.5h11v9h-11z" Fill="Transparent" Stroke="#FF2B2B2B" StrokeThickness="1.5" Stretch="None" />
+                    </Border>
+                    <Border Width="32" Height="32" Background="Transparent" CornerRadius="8" PointerPressed="OnShapeOptionPressed" Tag="Triangle" ToolTipService.ToolTip="三角形">
+                        <Path Width="20" Height="20" Data="M10 4.5 L16 15.5 H4 Z" Fill="Transparent" Stroke="#FF2B2B2B" StrokeThickness="1.5" Stretch="None" />
+                    </Border>
+                    <Border Width="32" Height="32" Background="Transparent" CornerRadius="8" PointerPressed="OnShapeOptionPressed" Tag="Line" ToolTipService.ToolTip="直线">
+                        <Path Width="20" Height="20" Data="M3.5 10 H16.5" Fill="Transparent" Stroke="#FF2B2B2B" StrokeThickness="1.5" Stretch="None" />
+                    </Border>
+                    <Border Width="32" Height="32" Background="Transparent" CornerRadius="8" PointerPressed="OnShapeOptionPressed" Tag="Arrow" ToolTipService.ToolTip="箭头">
+                        <Path Width="20" Height="20" Data="M3.5 10 H15 M10.5 5.5 L15.5 10 L10.5 14.5" Fill="Transparent" Stroke="#FF2B2B2B" StrokeThickness="1.5" Stretch="None" />
+                    </Border>
+                    <Border Width="32" Height="32" Background="Transparent" CornerRadius="8" PointerPressed="OnShapeOptionPressed" Tag="Circle" ToolTipService.ToolTip="圆形">
+                        <Path Width="20" Height="20" Data="M4.5 10 a5.5 5.5 0 1 0 11 0 a5.5 5.5 0 1 0 -11 0 z" Fill="Transparent" Stroke="#FF2B2B2B" StrokeThickness="1.5" Stretch="None" />
+                    </Border>
+                </StackPanel>
+                <!-- 第二行：圆角矩形 / 直角三角形 / 虚线箭头 / 椭圆 / 虚线 -->
+                <StackPanel x:Name="ShapeRow2" Orientation="Horizontal" Spacing="4">
+                    <Border Width="32" Height="32" Background="Transparent" CornerRadius="8" PointerPressed="OnShapeOptionPressed" Tag="RoundedRectangle" ToolTipService.ToolTip="圆角矩形">
+                        <Path Width="20" Height="20" Data="M6.5 4.5h7a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-7a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2z" Fill="Transparent" Stroke="#FF2B2B2B" StrokeThickness="1.5" Stretch="None" />
+                    </Border>
+                    <Border Width="32" Height="32" Background="Transparent" CornerRadius="8" PointerPressed="OnShapeOptionPressed" Tag="RightTriangle" ToolTipService.ToolTip="直角三角形">
+                        <Path Width="20" Height="20" Data="M5 4.5 V15.5 H16 Z" Fill="Transparent" Stroke="#FF2B2B2B" StrokeThickness="1.5" Stretch="None" />
+                    </Border>
+                    <Border Width="32" Height="32" Background="Transparent" CornerRadius="8" PointerPressed="OnShapeOptionPressed" Tag="DashedArrow" ToolTipService.ToolTip="虚线箭头">
+                        <Path Width="20" Height="20" Data="M3.5 10 H15 M10.5 5.5 L15.5 10 L10.5 14.5" Fill="Transparent" Stroke="#FF2B2B2B" StrokeDashArray="2,2" StrokeThickness="1.5" Stretch="None" />
+                    </Border>
+                    <Border Width="32" Height="32" Background="Transparent" CornerRadius="8" PointerPressed="OnShapeOptionPressed" Tag="Ellipse" ToolTipService.ToolTip="椭圆">
+                        <Path Width="20" Height="20" Data="M3 10 a7 4.5 0 1 0 14 0 a7 4.5 0 1 0 -14 0 z" Fill="Transparent" Stroke="#FF2B2B2B" StrokeThickness="1.5" Stretch="None" />
+                    </Border>
+                    <Border Width="32" Height="32" Background="Transparent" CornerRadius="8" PointerPressed="OnShapeOptionPressed" Tag="DashedLine" ToolTipService.ToolTip="虚线">
+                        <Path Width="20" Height="20" Data="M3.5 10 H16.5" Fill="Transparent" Stroke="#FF2B2B2B" StrokeDashArray="2,2" StrokeThickness="1.5" Stretch="None" />
+                    </Border>
+                </StackPanel>
+                <!-- 分隔线 + 三档粗细（右对齐斜杠，越粗越高） -->
+                <Border Height="1" Margin="0,2" Background="#14000000" />
+                <StackPanel x:Name="ShapeThicknessRow" Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right">
+                    <Border Width="30" Height="30" Background="Transparent" CornerRadius="8" PointerPressed="OnShapeThicknessPressed" Tag="2" ToolTipService.ToolTip="细">
+                        <Border Width="16" Height="2.5" Background="#FF8A8A8A" CornerRadius="1.25" RenderTransformOrigin="0.5,0.5">
+                            <Border.RenderTransform>
+                                <RotateTransform Angle="-45" />
+                            </Border.RenderTransform>
+                        </Border>
+                    </Border>
+                    <Border Width="30" Height="30" Background="Transparent" CornerRadius="8" PointerPressed="OnShapeThicknessPressed" Tag="3.5" ToolTipService.ToolTip="中">
+                        <Border Width="16" Height="4" Background="#FF8A8A8A" CornerRadius="2" RenderTransformOrigin="0.5,0.5">
+                            <Border.RenderTransform>
+                                <RotateTransform Angle="-45" />
+                            </Border.RenderTransform>
+                        </Border>
+                    </Border>
+                    <Border Width="30" Height="30" Background="Transparent" CornerRadius="8" PointerPressed="OnShapeThicknessPressed" Tag="5" ToolTipService.ToolTip="粗">
+                        <Border Width="16" Height="5.5" Background="#FF8A8A8A" CornerRadius="2.75" RenderTransformOrigin="0.5,0.5">
+                            <Border.RenderTransform>
+                                <RotateTransform Angle="-45" />
+                            </Border.RenderTransform>
+                        </Border>
+                    </Border>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
         <!-- 白色圆角竖条卡片：靠右侧垂直居中 -->
         <Border
             x:Name="Card"
