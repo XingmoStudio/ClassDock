@@ -48,10 +48,17 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          $release = gh release view nightly --json id -q .id 2>$null
-          if ($release) {
+          # 尝试获取旧 Release 的 ID，如果不存在则返回空
+          $releaseId = gh release view nightly --json id -q .id 2>$null
+          
+          # 如果确实存在旧 Release，才执行删除
+          if ($releaseId) {
+            Write-Host "发现旧的 Nightly Release，正在删除..."
             gh release delete nightly --yes
+          } else {
+            Write-Host "未发现旧的 Nightly Release，跳过删除步骤。"
           }
+
 
       - name: Create nightly release
         uses: softprops/action-gh-release@v2
