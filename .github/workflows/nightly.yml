@@ -58,6 +58,9 @@ jobs:
           } else {
             Write-Host "未发现旧的 Nightly Release，跳过删除步骤。"
           }
+          
+          # 强制返回成功状态码，防止 gh 命令的报错导致整个 Step 失败
+          exit 0
 
 
       - name: Create nightly release
