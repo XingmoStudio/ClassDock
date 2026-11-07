@@ -29,6 +29,11 @@ public sealed partial class PanelWindow : Window
         Hwnd = WindowNative.GetWindowHandle(this);
         DwmGlass.Enable(Hwnd);
 
+        // 面板跟随统一主题，功能图标使用应用强调色（设置按钮保持默认样式）
+        AppTheme.Apply(Root);
+        AnnotationIcon.Foreground = AppTheme.AccentBrush;
+        Closed += (_, _) => AppTheme.Unapply(Root);
+
         var presenter = AppWindow.Presenter as OverlappedPresenter;
         presenter?.SetBorderAndTitleBar(false, false);
         if (presenter is not null)

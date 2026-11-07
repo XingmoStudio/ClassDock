@@ -51,6 +51,7 @@ public sealed partial class BarWindow : Window
     public BarWindow()
     {
         InitializeComponent();
+        App.ApplyWindowIcon(AppWindow);
         _hwnd = WindowNative.GetWindowHandle(this);
         SetupWindow();
 

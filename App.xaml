@@ -8,6 +8,37 @@
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
             </ResourceDictionary.MergedDictionaries>
+
+            <!-- 应用自绘界面的语义配色：由 AppTheme 切换窗口 RequestedTheme 时自动换档 -->
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="AppPageBackgroundBrush" Color="#FFF9F9F9" />
+                    <SolidColorBrush x:Key="AppSidebarBackgroundBrush" Color="#FFF3F3F3" />
+                    <SolidColorBrush x:Key="AppCardBackgroundBrush" Color="#FFFFFFFF" />
+                    <SolidColorBrush x:Key="AppCardBorderBrush" Color="#14000000" />
+                    <SolidColorBrush x:Key="AppTextBrush" Color="#FF2B2B2B" />
+                    <SolidColorBrush x:Key="AppSecondaryTextBrush" Color="#66000000" />
+                    <SolidColorBrush x:Key="AppTertiaryTextBrush" Color="#99000000" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Default">
+                    <SolidColorBrush x:Key="AppPageBackgroundBrush" Color="#FFF9F9F9" />
+                    <SolidColorBrush x:Key="AppSidebarBackgroundBrush" Color="#FFF3F3F3" />
+                    <SolidColorBrush x:Key="AppCardBackgroundBrush" Color="#FFFFFFFF" />
+                    <SolidColorBrush x:Key="AppCardBorderBrush" Color="#14000000" />
+                    <SolidColorBrush x:Key="AppTextBrush" Color="#FF2B2B2B" />
+                    <SolidColorBrush x:Key="AppSecondaryTextBrush" Color="#66000000" />
+                    <SolidColorBrush x:Key="AppTertiaryTextBrush" Color="#99000000" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="AppPageBackgroundBrush" Color="#FF202020" />
+                    <SolidColorBrush x:Key="AppSidebarBackgroundBrush" Color="#FF2B2B2B" />
+                    <SolidColorBrush x:Key="AppCardBackgroundBrush" Color="#FF2B2B2B" />
+                    <SolidColorBrush x:Key="AppCardBorderBrush" Color="#26FFFFFF" />
+                    <SolidColorBrush x:Key="AppTextBrush" Color="#FFFFFFFF" />
+                    <SolidColorBrush x:Key="AppSecondaryTextBrush" Color="#99FFFFFF" />
+                    <SolidColorBrush x:Key="AppTertiaryTextBrush" Color="#99FFFFFF" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

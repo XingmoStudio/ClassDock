@@ -7,18 +7,23 @@ using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
+using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.UI.Xaml.Shapes;
 using Path = Microsoft.UI.Xaml.Shapes.Path;
 using System.Diagnostics;
+using System.Runtime.InteropServices.WindowsRuntime;
 using Windows.Foundation;
 using Windows.Graphics;
+using Windows.Graphics.Imaging;
+using Windows.Storage;
+using Windows.Storage.Pickers;
 using Windows.System;
 using Windows.UI;
 using WinRT.Interop;
 
 namespace ClassDock;
 
-/// <summary>批注工具。几何图形与尺规本阶段仅占位。</summary>
+/// <summary>批注工具。尺规选中即弹出工具列表面板，绘制行为本阶段仍为占位。</summary>
 public enum AnnotationTool
 {
     Pen,
@@ -105,6 +110,9 @@ public sealed partial class AnnotationCanvasWindow : Window
 
     /// <summary>本次橡皮拖动中切割出的最终片段（撤销时移除）。</summary>
     private readonly List<InkStroke> _eraseFragments = [];
+    // 被擦笔迹/切出片段各自在 _strokes 中的原始下标，撤销重做时按原位恢复层级
+    private readonly Dictionary<InkStroke, int> _eraseRemovedIndex = [];
+    private readonly Dictionary<InkStroke, int> _eraseFragmentIndex = [];
 
     // 当前绘制状态
     private InkStroke? _current;        // 正在绘制的笔迹
@@ -167,6 +175,7 @@ public sealed partial class AnnotationCanvasWindow : Window
     public AnnotationCanvasWindow()
     {
         InitializeComponent();
+        App.ApplyWindowIcon(AppWindow);
         Hwnd = WindowNative.GetWindowHandle(this);
 
         var presenter = AppWindow.Presenter as OverlappedPresenter;
@@ -184,14 +193,23 @@ public sealed partial class AnnotationCanvasWindow : Window
         _toolCheckedBrush = (SolidColorBrush)Root.Resources["ToolCheckedBrush"];
         _toolCheckedHoverBrush = (SolidColorBrush)Root.Resources["ToolCheckedHoverBrush"];
         _toolCheckedPressedBrush = (SolidColorBrush)Root.Resources["ToolCheckedPressedBrush"];
+        // 工具选中态沿用应用统一强调色（窗口面板本身保持浅色，不参与明暗切换）
+        ThemeAccent = AppTheme.AccentColor;
         IconOf(PenButton).Fill = AccentBrush;
-        RefreshAccent();
+        AppTheme.Changed += OnAppThemeChanged;
+        Closed += (_, _) => AppTheme.Changed -= OnAppThemeChanged;
         UpdateThicknessVisuals();
         UpdateSwatchSelection();
         UpdateEraserSizeVisuals();
         UpdateShapeOptionVisuals();
         UpdateShapeThicknessVisuals();
         AddAccelerators();
+
+        // 尺规手势统一在尺规图层上处理：图层常驻，重建尺身时指针捕获不会丢失
+        RulerLayer.PointerMoved += OnRulerPointerMoved;
+        RulerLayer.PointerReleased += OnRulerPointerReleased;
+        RulerLayer.PointerCaptureLost += OnRulerPointerCaptureLost;
+        RulerLayer.PointerWheelChanged += OnRulerPointerWheelChanged;
     }
 
     /// <summary>按钮内容 = Viewbox + Path，取出其中的 Path 以便切换选中态颜色。
@@ -227,7 +245,7 @@ public sealed partial class AnnotationCanvasWindow : Window
         var element = source as DependencyObject;
         while (element is not null)
         {
-            if (element is FrameworkElement { Name: "PenPanel" or "EraserPanel" or "ShapesPanel" or "Card" }) return true;
+            if (element is FrameworkElement { Name: "PenPanel" or "EraserPanel" or "ShapesPanel" or "ToolPanel" or "Card" }) return true;
             element = VisualTreeHelper.GetParent(element);
         }
         return false;
@@ -272,6 +290,7 @@ public sealed partial class AnnotationCanvasWindow : Window
             if (tool == AnnotationTool.Pen) TogglePenPanel();
             else if (tool == AnnotationTool.Eraser) ToggleEraserPanel();
             else if (tool == AnnotationTool.Shapes) ToggleShapesPanel();
+            else if (tool == AnnotationTool.Ruler) ToggleToolPanel();
             return;
         }
         FinishStroke();
@@ -281,6 +300,9 @@ public sealed partial class AnnotationCanvasWindow : Window
         if (tool != AnnotationTool.Pen) HidePenPanel();
         if (tool != AnnotationTool.Eraser) HideEraserPanel();
         if (tool != AnnotationTool.Shapes) HideShapesPanel();
+        if (tool != AnnotationTool.Ruler) HideToolPanel();
+        // 工具：选中即弹出面板，无需再点一次
+        if (tool == AnnotationTool.Ruler) ShowSlidePanel(ToolPanel);
     }
 
     // ── 设置面板（画笔 / 橡皮 / 几何图形）：都从右侧工具栏向左滑入，再向右收起 ──
@@ -319,6 +341,1091 @@ public sealed partial class AnnotationCanvasWindow : Window
 
     /// <summary>隐藏几何图形设置面板。</summary>
     private void HideShapesPanel() => HideSlidePanel(ShapesPanel);
+
+    /// <summary>切换工具面板的显示/隐藏。</summary>
+    private void ToggleToolPanel()
+    {
+        if (ToolPanel.Visibility == Visibility.Visible && !_closingPanels.Contains(ToolPanel)) HideToolPanel();
+        else ShowSlidePanel(ToolPanel);
+    }
+
+    /// <summary>隐藏工具面板。</summary>
+    private void HideToolPanel() => HideSlidePanel(ToolPanel);
+
+    // ── 工具：保存至本地 ──
+
+    private bool _savingToLocal;
+
+    /// <summary>「保存至本地」：把进入批注时的快照底图与画布笔迹合成后写入用户选择的文件。</summary>
+    private async void OnSaveToLocalPressed(object sender, PointerRoutedEventArgs e)
+    {
+        if (_savingToLocal) return;
+        _savingToLocal = true;
+        try
+        {
+            e.Handled = true;
+            await SaveCanvasToLocalAsync();
+        }
+        catch (Exception ex)
+        {
+            await new ContentDialog
+            {
+                Title = "保存失败",
+                Content = ex.Message,
+                CloseButtonText = "确定",
+                XamlRoot = Root.XamlRoot
+            }.ShowAsync();
+        }
+        finally
+        {
+            _savingToLocal = false;
+        }
+    }
+
+    /// <summary>选择保存位置（WinUI 3 的现代保存对话框），默认 JPG，合成快照与笔迹后编码写出。</summary>
+    private async Task SaveCanvasToLocalAsync()
+    {
+        var picker = new FileSavePicker
+        {
+            SuggestedFileName = "ClassDock批注_" + DateTime.Now.ToString("yyyyMMdd_HHmmss"),
+            SuggestedStartLocation = PickerLocationId.PicturesLibrary,
+            DefaultFileExtension = ".jpg"
+        };
+        picker.FileTypeChoices.Add("JPEG 图片", [".jpg", ".jpeg"]);
+        picker.FileTypeChoices.Add("PNG 图片", [".png"]);
+        InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(this));
+
+        StorageFile? file = await picker.PickSaveFileAsync();
+        if (file is null) return;
+
+        // 底图：优先复用进入批注时的快照，失败则现截一张，再失败退化为纯黑底
+        var snapshot = Snapshot.Source as WriteableBitmap ?? ScreenSnapshot.Capture();
+        int width, height;
+        byte[] basePixels;
+        if (snapshot is not null)
+        {
+            width = snapshot.PixelWidth;
+            height = snapshot.PixelHeight;
+            basePixels = new byte[width * height * 4];
+            using var pixelStream = snapshot.PixelBuffer.AsStream();
+            pixelStream.ReadExactly(basePixels);
+        }
+        else
+        {
+            width = AppWindow.Size.Width;
+            height = AppWindow.Size.Height;
+            basePixels = new byte[width * height * 4];
+            for (int i = 3; i < basePixels.Length; i += 4) basePixels[i] = 0xFF;
+        }
+
+        // 笔迹：把 InkLayer 直接渲染到与底图相同的像素尺寸（自动处理 DPI 缩放）
+        var rtb = new RenderTargetBitmap();
+        await rtb.RenderAsync(InkLayer, width, height);
+        var inkPixels = (await rtb.GetPixelsAsync()).ToArray(); // BGRA 预乘 alpha
+
+        // 合成：预乘 alpha 的笔迹叠在不透明底图上，out = src + dst * (1 - srcA)
+        if (inkPixels.Length == basePixels.Length)
+        {
+            for (int i = 0; i < basePixels.Length; i += 4)
+            {
+                int inv = 255 - inkPixels[i + 3];
+                if (inv == 255) continue;
+                basePixels[i] = (byte)(inkPixels[i] + (basePixels[i] * inv + 127) / 255);
+                basePixels[i + 1] = (byte)(inkPixels[i + 1] + (basePixels[i + 1] * inv + 127) / 255);
+                basePixels[i + 2] = (byte)(inkPixels[i + 2] + (basePixels[i + 2] * inv + 127) / 255);
+            }
+        }
+
+        bool isPng = file.FileType.Equals(".png", StringComparison.OrdinalIgnoreCase);
+        using var fileStream = await file.OpenAsync(FileAccessMode.ReadWrite);
+        var encoder = await BitmapEncoder.CreateAsync(
+            isPng ? BitmapEncoder.PngEncoderId : BitmapEncoder.JpegEncoderId, fileStream);
+        if (!isPng)
+        {
+            var quality = new BitmapPropertySet
+            {
+                { "ImageQuality", new BitmapTypedValue(0.9f, PropertyType.Single) }
+            };
+            await encoder.BitmapProperties.SetPropertiesAsync(quality);
+        }
+        double dpi = 96.0 * (Root.XamlRoot?.RasterizationScale ?? 1.0);
+        encoder.SetPixelData(
+            BitmapPixelFormat.Bgra8, BitmapAlphaMode.Ignore,
+            (uint)width, (uint)height, dpi, dpi, basePixels);
+        await encoder.FlushAsync();
+    }
+
+    // ── 工具：屏幕刻度尺 ──
+
+    /// <summary>1 毫米对应的逻辑像素数（1 逻辑英寸恒为 96 逻辑像素，与 DPI 缩放无关）。</summary>
+    private const double MmToLogicalPx = 96.0 / 25.4;
+
+    private const double RulerCmPx = 10 * MmToLogicalPx;   // 1 厘米对应的逻辑像素
+    private const double RulerEndMargin = 10;               // 刻度起点距尺身两端的留白
+    private const double RulerBaseHeight = 100;             // 尺身原始高度（缩放前）
+    private const double RulerTickBandHeight = 32;          // 顶部刻度带高度
+    private const int RulerMinCm = 15;                      // 最短刻度长度（含两端留白约 15.5cm）
+    private const double RulerWheelAngleStep = 5;           // 滚轮一格旋转角度
+
+    private static readonly double[] RulerZoomSteps = [1.0, 1.25, 1.5];
+
+    /// <summary>尺规图层上的手势：直尺的拖动/旋转/调长度，圆规的拖动/调开口/画弧。</summary>
+    private enum RulerGesture { None, Drag, Rotate, Resize, CompassDrag, CompassResize, CompassDraw }
+
+    private Border? _screenRuler;
+    private int _rulerCmCount = RulerMinCm;
+    private int _rulerZoomIndex;
+    private double _rulerAngle;       // 当前旋转角度（度，顺时针为正）
+
+    private RulerGesture _rulerGesture = RulerGesture.None;
+    private Point _gestureStart;      // 手势起点（尺规图层坐标）
+    private double _gestureStartLeft;
+    private double _gestureStartTop;
+    private int _gestureStartCm;
+    private double _gestureStartHalfAngle; // 圆规调开口手势起始的半角（度）
+
+    // ---- 尺边吸附画直线 ----
+    private const double RulerSnapTolerance = 14; // 距刻度边多少逻辑像素内触发吸附
+    private bool _rulerSnapActive;      // 本次笔画是否为贴尺边画直线
+    private Point _snapStart;           // 吸附起点（画布坐标，已投影到尺边上）
+    private Point _snapEdgeStart;       // 尺边左端（画布坐标）
+    private Point _snapEdgeDir;         // 尺边方向单位向量
+    private double _snapEdgeLen;        // 尺边长度
+    private Point _snapOutward;         // 尺边外法线方向（读数标签侧）
+    private TextBlock? _snapLabel;      // 实时长度读数（厘米，两位小数）
+    private double _lastPointerAngle; // 旋转手势中上一次指针相对尺心的角度
+    private bool _rotateMoved;        // 旋转手势是否已真正移动（用于区分单击）
+
+    // ---- 圆规 ----
+    private const double CompassLegLength = 380;        // 铰链到尖端的长度（逻辑像素）
+    private const double CompassPivotTop = 118;         // 铰链中心距容器顶部（上方容纳关闭按钮与捏柄）
+    private const double CompassMinHalfAngle = 6;       // 最小开口半角（度）
+    private const double CompassMaxHalfAngle = 30;      // 最大开口半角（度）
+    private const double CompassDefaultHalfAngle = 15;
+    private const double CompassDrawStepDegrees = 3;    // 画弧采样步进（度），快速旋转时补点保证弧线平滑
+
+    private Canvas? _compass;
+    private Polyline? _compassRadiusLine;   // 针尖与笔尖之间的虚连线
+    private TextBlock? _compassRadiusLabel; // 半径读数
+    private double _compassHalfAngle = CompassDefaultHalfAngle;
+    private double _compassAngle;           // 圆规整体绕针尖的旋转角（度，顺时针为正）
+    private Point _compassNeedle;           // 针尖在画布坐标中的位置（圆心）
+    private InkStroke? _compassStroke;      // 画弧期间的活动笔迹
+    private double _compassLastPointerAngle;
+
+    /// <summary>「屏幕刻度尺」：在画布中央召唤/收回一把直尺。</summary>
+    private void OnScreenRulerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        e.Handled = true;
+        if (_screenRuler is not null)
+        {
+            HideScreenRuler();
+            return;
+        }
+        _screenRuler = BuildScreenRuler();
+        RulerLayer.Children.Add(_screenRuler);
+        ApplyRulerTransform();
+        CenterRuler();
+        ScreenRulerOption.Background = ShapeActiveBrush;
+    }
+
+    private void HideScreenRuler()
+    {
+        if (_screenRuler is null) return;
+        RulerLayer.Children.Remove(_screenRuler);
+        _screenRuler = null;
+        // 收起时复位形态，下次召唤回到默认的 15cm 横放 100%
+        _rulerZoomIndex = 0;
+        _rulerAngle = 0;
+        _rulerCmCount = RulerMinCm;
+        _rulerGesture = RulerGesture.None;
+        ScreenRulerOption.Background = TransparentBrush;
+    }
+
+    /// <summary>关闭按钮：收起直尺。</summary>
+    private void OnRulerClosePressed(object sender, PointerRoutedEventArgs e)
+    {
+        e.Handled = true;
+        HideScreenRuler();
+    }
+
+    /// <summary>缩放按钮：在 100% → 125% → 150% 之间循环，围绕尺心缩放不改变位置。</summary>
+    private void OnRulerZoomPressed(object sender, PointerRoutedEventArgs e)
+    {
+        e.Handled = true;
+        _rulerZoomIndex = (_rulerZoomIndex + 1) % RulerZoomSteps.Length;
+        ApplyRulerTransform();
+    }
+
+    /// <summary>旋转按钮：按住拖动可自由旋转，单击则顺时针转 90°。</summary>
+    private void OnRulerRotatePressed(object sender, PointerRoutedEventArgs e)
+    {
+        e.Handled = true;
+        if (_screenRuler is null) return;
+        _gestureStart = e.GetCurrentPoint(RulerLayer).Position;
+        _lastPointerAngle = PointerAngleToRulerCenter(_gestureStart);
+        _rotateMoved = false;
+        _rulerGesture = RulerGesture.Rotate;
+        RulerLayer.CapturePointer(e.Pointer);
+    }
+
+    /// <summary>长度调整按钮：按住后左右滑动改变刻度长度（最短 15.5cm 上下）。</summary>
+    private void OnRulerResizePressed(object sender, PointerRoutedEventArgs e)
+    {
+        e.Handled = true;
+        if (_screenRuler is null) return;
+        _gestureStart = e.GetCurrentPoint(RulerLayer).Position;
+        _gestureStartCm = _rulerCmCount;
+        _rulerGesture = RulerGesture.Resize;
+        RulerLayer.CapturePointer(e.Pointer);
+    }
+
+    /// <summary>尺身按下：拖动整把尺子。</summary>
+    private void OnRulerBodyPressed(object sender, PointerRoutedEventArgs e)
+    {
+        // 画笔工具下按在刻度边附近：不吞事件、不进入拖尺手势，
+        // 放行冒泡到画布，由画布走贴边画直线
+        if (_tool == AnnotationTool.Pen
+            && e.GetCurrentPoint(Root).Properties.IsLeftButtonPressed
+            && TrySnapToRulerEdge(e.GetCurrentPoint(Root).Position) is not null)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        if (_screenRuler is null) return;
+        _gestureStart = e.GetCurrentPoint(RulerLayer).Position;
+        _gestureStartLeft = Canvas.GetLeft(_screenRuler);
+        _gestureStartTop = Canvas.GetTop(_screenRuler);
+        _rulerGesture = RulerGesture.Drag;
+        RulerLayer.CapturePointer(e.Pointer);
+    }
+
+    private void OnRulerPointerMoved(object sender, PointerRoutedEventArgs e)
+    {
+        if (_rulerGesture == RulerGesture.None) return;
+        // 直尺手势只在尺子存在时处理；圆规手势不依赖尺子
+        if (_screenRuler is null && _rulerGesture is RulerGesture.Drag or RulerGesture.Rotate or RulerGesture.Resize) return;
+        e.Handled = true;
+        var pt = e.GetCurrentPoint(RulerLayer).Position;
+        switch (_rulerGesture)
+        {
+            case RulerGesture.Drag:
+                Canvas.SetLeft(_screenRuler!, _gestureStartLeft + pt.X - _gestureStart.X);
+                Canvas.SetTop(_screenRuler!, _gestureStartTop + pt.Y - _gestureStart.Y);
+                break;
+
+            case RulerGesture.Rotate:
+            {
+                double angle = PointerAngleToRulerCenter(pt);
+                // 逐帧累加增量，指针跨越 ±180° 时不会跳变，可连续旋转任意角度
+                double delta = angle - _lastPointerAngle;
+                if (delta > 180) delta -= 360;
+                else if (delta < -180) delta += 360;
+                _lastPointerAngle = angle;
+                if (Math.Abs(pt.X - _gestureStart.X) + Math.Abs(pt.Y - _gestureStart.Y) > 4) _rotateMoved = true;
+                _rulerAngle = NormalizeAngle(_rulerAngle + delta);
+                ApplyRulerTransform();
+                break;
+            }
+
+            case RulerGesture.Resize:
+            {
+                double perCm = RulerCmPx * RulerZoomSteps[_rulerZoomIndex];
+                int target = Math.Clamp(
+                    _gestureStartCm + (int)Math.Round((pt.X - _gestureStart.X) / perCm),
+                    RulerMinCm, MaxRulerCm());
+                if (target != _rulerCmCount) RebuildRulerKeepingPlacement(target);
+                break;
+            }
+
+            case RulerGesture.CompassDrag:
+                _compassNeedle = new Point(
+                    _gestureStartLeft + pt.X - _gestureStart.X,
+                    _gestureStartTop + pt.Y - _gestureStart.Y);
+                ApplyCompassTransform();
+                break;
+
+            case RulerGesture.CompassResize:
+            {
+                double theta0 = _gestureStartHalfAngle * Math.PI / 180;
+                // 让半径变化跟手（Δr ≈ Δx），再换算回半角增量
+                double dDeg = (pt.X - _gestureStart.X) * 180 / (Math.PI * 2 * CompassLegLength * Math.Cos(theta0));
+                double target = Math.Clamp(_gestureStartHalfAngle + dDeg, CompassMinHalfAngle, CompassMaxHalfAngle);
+                if (Math.Abs(target - _compassHalfAngle) >= 0.2)
+                {
+                    _compassHalfAngle = target;
+                    RebuildCompass();
+                }
+                break;
+            }
+
+            case RulerGesture.CompassDraw:
+            {
+                double angle = PointerAngleToCompassCenter(pt);
+                // 逐帧累加增量，指针跨越 ±180° 时不会跳变，可连续旋转画弧
+                double delta = angle - _compassLastPointerAngle;
+                if (delta > 180) delta -= 360;
+                else if (delta < -180) delta += 360;
+                _compassLastPointerAngle = angle;
+                // 快速旋转时按 ≤3° 步进补采样点，保证弧线平滑
+                int steps = Math.Max(1, (int)Math.Ceiling(Math.Abs(delta) / CompassDrawStepDegrees));
+                for (int i = 1; i <= steps; i++)
+                {
+                    _compassAngle += delta / steps;
+                    if (_compassStroke is not null) AppendStrokePoint(_compassStroke, CompassPencilCanvasPos());
+                }
+                ApplyCompassTransform();
+                break;
+            }
+        }
+    }
+
+    private void OnRulerPointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        if (_rulerGesture == RulerGesture.None) return;
+        e.Handled = true;
+        var gesture = _rulerGesture;
+        // 先结束手势再释放捕获：ReleasePointerCapture 会同步触发 CaptureLost
+        _rulerGesture = RulerGesture.None;
+        RulerLayer.ReleasePointerCapture(e.Pointer);
+        if (gesture == RulerGesture.Rotate && !_rotateMoved)
+        {
+            // 单击旋转按钮：顺时针吸附到下一个 90°
+            _rulerAngle = NormalizeAngle(Math.Round(_rulerAngle / 90) * 90 + 90);
+            ApplyRulerTransform();
+        }
+        if (gesture == RulerGesture.CompassDraw)
+        {
+            // 收笔：落笔即点、拖动成弧在此定稿
+            FinishStroke();
+            _compassStroke = null;
+        }
+    }
+
+    private void OnRulerPointerCaptureLost(object sender, PointerRoutedEventArgs e)
+    {
+        if (_rulerGesture == RulerGesture.CompassDraw)
+        {
+            FinishStroke();
+            _compassStroke = null;
+        }
+        _rulerGesture = RulerGesture.None;
+    }
+
+    /// <summary>滚轮：向上滚逆时针、向下滚顺时针旋转。</summary>
+    private void OnRulerPointerWheelChanged(object sender, PointerRoutedEventArgs e)
+    {
+        if (_screenRuler is null) return;
+        e.Handled = true;
+        int wheelDelta = e.GetCurrentPoint(RulerLayer).Properties.MouseWheelDelta;
+        if (wheelDelta == 0) return;
+        _rulerAngle = NormalizeAngle(_rulerAngle - wheelDelta / 120.0 * RulerWheelAngleStep);
+        ApplyRulerTransform();
+    }
+
+    /// <summary>指针相对尺心（旋转中心）的角度。</summary>
+    private double PointerAngleToRulerCenter(Point pt)
+    {
+        double cx = Canvas.GetLeft(_screenRuler!) + _screenRuler!.Width / 2;
+        double cy = Canvas.GetTop(_screenRuler) + _screenRuler.Height / 2;
+        return Math.Atan2(pt.Y - cy, pt.X - cx) * 180 / Math.PI;
+    }
+
+    /// <summary>把角度折算到 (-180, 180]，避免累加后数值无限增长。</summary>
+    private static double NormalizeAngle(double angle)
+    {
+        angle %= 360;
+        if (angle > 180) angle -= 360;
+        else if (angle <= -180) angle += 360;
+        return angle;
+    }
+
+    /// <summary>最短长度之外的可用上限：按当前缩放不超出窗口宽度。</summary>
+    private int MaxRulerCm()
+    {
+        double available = Root.ActualWidth - 48 - RulerEndMargin * 2;
+        return Math.Max(RulerMinCm, (int)Math.Floor(available / (RulerCmPx * RulerZoomSteps[_rulerZoomIndex])));
+    }
+
+    /// <summary>改变刻度长度后重建尺身：左端保持原位，长度向右延伸或向左收缩。</summary>
+    private void RebuildRulerKeepingPlacement(int cmCount)
+    {
+        if (_screenRuler is null) return;
+        double left = Canvas.GetLeft(_screenRuler);
+        double top = Canvas.GetTop(_screenRuler);
+        RulerLayer.Children.Remove(_screenRuler);
+        _rulerCmCount = cmCount;
+        _screenRuler = BuildScreenRuler();
+        RulerLayer.Children.Add(_screenRuler);
+        ApplyRulerTransform();
+        Canvas.SetLeft(_screenRuler, left);
+        Canvas.SetTop(_screenRuler, top);
+    }
+
+    /// <summary>刷新缩放与旋转（均围绕尺身中心，不改变位置）。</summary>
+    private void ApplyRulerTransform()
+    {
+        if (_screenRuler is null) return;
+        double scale = RulerZoomSteps[_rulerZoomIndex];
+        _screenRuler.RenderTransformOrigin = new Point(0.5, 0.5);
+        _screenRuler.RenderTransform = new TransformGroup
+        {
+            Children =
+            {
+                new ScaleTransform { ScaleX = scale, ScaleY = scale },
+                new RotateTransform { Angle = _rulerAngle }
+            }
+        };
+    }
+
+    /// <summary>把尺身中心对准画布中心（仅召唤时使用）。</summary>
+    private void CenterRuler()
+    {
+        if (_screenRuler is null) return;
+        Canvas.SetLeft(_screenRuler, (Root.ActualWidth - _screenRuler.Width) / 2);
+        Canvas.SetTop(_screenRuler, (Root.ActualHeight - _screenRuler.Height) / 2);
+    }
+
+    /// <summary>
+    /// 生成一把直尺：半透明浅色尺身，顶部为略亮的刻度带（刻度自顶边向下悬挂，厘米刻度右侧标注数字），
+    /// 底部左侧为关闭按钮、右侧为缩放/旋转/长度调整按钮。长度由 _rulerCmCount 决定。
+    /// </summary>
+    private Border BuildScreenRuler()
+    {
+        double rulerWidth = _rulerCmCount * RulerCmPx + RulerEndMargin * 2;
+
+        var tickBrush = new SolidColorBrush(Color.FromArgb(0xFF, 0x4A, 0x4A, 0x4A));
+        var numberBrush = new SolidColorBrush(Color.FromArgb(0xFF, 0x6E, 0x6E, 0x6E));
+
+        var tickCanvas = new Canvas { Width = rulerWidth - 2, Height = RulerTickBandHeight };
+        for (int mm = 0; mm <= _rulerCmCount * 10; mm++)
+        {
+            double x = RulerEndMargin + mm * MmToLogicalPx;
+            bool isCm = mm % 10 == 0;
+            tickCanvas.Children.Add(new Line
+            {
+                X1 = x, Y1 = 0, X2 = x,
+                Y2 = isCm ? 15 : mm % 5 == 0 ? 10 : 6.5,
+                Stroke = tickBrush,
+                StrokeThickness = isCm ? 1.1 : 0.7
+            });
+            if (!isCm) continue;
+            var label = new TextBlock
+            {
+                Text = (mm / 10).ToString(),
+                FontSize = 10,
+                Foreground = numberBrush
+            };
+            Canvas.SetLeft(label, x + 2);
+            Canvas.SetTop(label, 16);
+            tickCanvas.Children.Add(label);
+        }
+
+        var tickBand = new Border
+        {
+            Height = RulerTickBandHeight,
+            Background = new SolidColorBrush(Color.FromArgb(0xE8, 0xFF, 0xFF, 0xFF)),
+            BorderBrush = new SolidColorBrush(Color.FromArgb(0x14, 0x00, 0x00, 0x00)),
+            BorderThickness = new Thickness(0, 0, 0, 1),
+            CornerRadius = new CornerRadius(5, 5, 0, 0),
+            Child = tickCanvas
+        };
+
+        var closeButton = MakeRulerButton(BuildRulerCloseIcon(), "关闭直尺", OnRulerClosePressed);
+        closeButton.HorizontalAlignment = HorizontalAlignment.Left;
+        closeButton.VerticalAlignment = VerticalAlignment.Bottom;
+        closeButton.Margin = new Thickness(12, 0, 0, 11);
+
+        var actions = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 14,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Bottom,
+            Margin = new Thickness(0, 0, 12, 11)
+        };
+        actions.Children.Add(MakeRulerButton(BuildRulerGlyph("\uE8A3", 13), "缩放（100% / 125% / 150%）", OnRulerZoomPressed));
+        actions.Children.Add(MakeRulerButton(BuildRulerGlyph("\uE72C", 13), "按住拖动旋转，滚轮也可旋转", OnRulerRotatePressed));
+        actions.Children.Add(MakeRulerButton(BuildRulerExpandIcon(), "按住左右滑动调整长度", OnRulerResizePressed));
+
+        var body = new Grid();
+        body.Children.Add(closeButton);
+        body.Children.Add(actions);
+
+        var layout = new Grid();
+        layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        layout.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        layout.Children.Add(tickBand);
+        Grid.SetRow(body, 1);
+        layout.Children.Add(body);
+
+        var ruler = new Border
+        {
+            Width = rulerWidth,
+            Height = RulerBaseHeight,
+            CornerRadius = new CornerRadius(6),
+            Background = new SolidColorBrush(Color.FromArgb(0xB4, 0xF6, 0xF9, 0xF9)),
+            BorderBrush = new SolidColorBrush(Color.FromArgb(0x1A, 0x00, 0x00, 0x00)),
+            BorderThickness = new Thickness(1),
+            Child = layout
+        };
+        // 尺身拦截指针：按下即开始拖动整把尺子，且不会在尺子上画出笔迹；按钮自身先处理并阻断冒泡
+        ruler.PointerPressed += OnRulerBodyPressed;
+        return ruler;
+    }
+
+    /// <summary>尺子上的圆形工具按钮：半透明白底、细描边，内容居中。</summary>
+    private static Border MakeRulerButton(FrameworkElement icon, string tooltip, PointerEventHandler onPressed)
+    {
+        icon.HorizontalAlignment = HorizontalAlignment.Center;
+        icon.VerticalAlignment = VerticalAlignment.Center;
+        var button = new Border
+        {
+            Width = 26,
+            Height = 26,
+            CornerRadius = new CornerRadius(13),
+            Background = new SolidColorBrush(Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF)),
+            BorderBrush = new SolidColorBrush(Color.FromArgb(0x24, 0x00, 0x00, 0x00)),
+            BorderThickness = new Thickness(1),
+            Child = icon
+        };
+        ToolTipService.SetToolTip(button, tooltip);
+        button.PointerPressed += onPressed;
+        return button;
+    }
+
+    /// <summary>Segoe MDL2 Assets 字形图标（细线条风格，与尺子按钮一致）。</summary>
+    private static TextBlock BuildRulerGlyph(string glyph, double size) => new()
+    {
+        Text = glyph,
+        FontFamily = new FontFamily("Segoe MDL2 Assets"),
+        FontSize = size,
+        Foreground = new SolidColorBrush(Color.FromArgb(0xFF, 0x4A, 0x4A, 0x4A))
+    };
+
+    /// <summary>关闭图标：细线叉号。</summary>
+    private static Viewbox BuildRulerCloseIcon()
+    {
+        var canvas = new Canvas { Width = 24, Height = 24 };
+        canvas.Children.Add(new Line
+        {
+            X1 = 6, Y1 = 6, X2 = 18, Y2 = 18,
+            Stroke = new SolidColorBrush(Color.FromArgb(0xFF, 0x4A, 0x4A, 0x4A)),
+            StrokeThickness = 2
+        });
+        canvas.Children.Add(new Line
+        {
+            X1 = 18, Y1 = 6, X2 = 6, Y2 = 18,
+            Stroke = new SolidColorBrush(Color.FromArgb(0xFF, 0x4A, 0x4A, 0x4A)),
+            StrokeThickness = 2
+        });
+        return new Viewbox { Width = 13, Height = 13, Child = canvas };
+    }
+
+    /// <summary>横向展开图标：双向水平箭头。</summary>
+    private static Viewbox BuildRulerExpandIcon()
+    {
+        var stroke = new SolidColorBrush(Color.FromArgb(0xFF, 0x4A, 0x4A, 0x4A));
+        var canvas = new Canvas { Width = 24, Height = 24 };
+        void Add(double x1, double y1, double x2, double y2) => canvas.Children.Add(
+            new Line { X1 = x1, Y1 = y1, X2 = x2, Y2 = y2, Stroke = stroke, StrokeThickness = 2.2 });
+        Add(3, 12, 21, 12);    // 杆身
+        Add(21, 12, 17, 8);    // 右箭头
+        Add(21, 12, 17, 16);
+        Add(3, 12, 7, 8);      // 左箭头
+        Add(3, 12, 7, 16);
+        return new Viewbox { Width = 17, Height = 17, Child = canvas };
+    }
+
+    // ---- 尺边吸附画直线 ----
+
+    /// <summary>落笔点是否贴着尺子的刻度边（顶边）：是则记录尺边几何并返回投影后的吸附起点，否则返回 null。</summary>
+    private Point? TrySnapToRulerEdge(Point p)
+    {
+        if (_screenRuler is null) return null;
+        var transform = _screenRuler.TransformToVisual(Root);
+        var a = transform.TransformPoint(new Point(0, 0));
+        var b = transform.TransformPoint(new Point(_screenRuler.Width, 0));
+        double len = Distance(a, b);
+        if (len < 1) return null;
+
+        var dir = new Point((b.X - a.X) / len, (b.Y - a.Y) / len);
+        double proj = (p.X - a.X) * dir.X + (p.Y - a.Y) * dir.Y;
+        double perpX = p.X - (a.X + dir.X * proj);
+        double perpY = p.Y - (a.Y + dir.Y * proj);
+        if (Math.Sqrt(perpX * perpX + perpY * perpY) > RulerSnapTolerance) return null;
+        if (proj < -8 || proj > len + 8) return null;
+
+        _snapEdgeStart = a;
+        _snapEdgeDir = dir;
+        _snapEdgeLen = len;
+
+        // 外法线：背离尺身中心的一侧，用于放置长度读数
+        var center = transform.TransformPoint(new Point(_screenRuler.Width / 2, _screenRuler.Height / 2));
+        double midX = (a.X + b.X) / 2, midY = (a.Y + b.Y) / 2;
+        double nx = midX - center.X, ny = midY - center.Y;
+        double nl = Math.Sqrt(nx * nx + ny * ny);
+        _snapOutward = nl > 0.01 ? new Point(nx / nl, ny / nl) : new Point(0, -1);
+
+        proj = Math.Clamp(proj, 0, len);
+        return new Point(a.X + dir.X * proj, a.Y + dir.Y * proj);
+    }
+
+    /// <summary>新建贴边直线草稿：视觉样式跟随当前画笔（颜色/粗细/荧光笔半透明），松手时按图形草稿提交。</summary>
+    private InkStroke BeginSnapDraft(Point p)
+    {
+        var line = new Polyline
+        {
+            Stroke = new SolidColorBrush(_penColor),
+            StrokeThickness = NominalThickness,
+            Opacity = StrokeOpacity,
+            StrokeLineJoin = PenLineJoin.Round,
+            StrokeStartLineCap = _penKind == PenKind.Highlighter ? PenLineCap.Flat : PenLineCap.Round,
+            StrokeEndLineCap = _penKind == PenKind.Highlighter ? PenLineCap.Flat : PenLineCap.Round,
+            IsHitTestVisible = false
+        };
+        line.Points.Add(p);
+
+        var draft = new InkStroke
+        {
+            Visual = line,
+            BaseThickness = NominalThickness,
+            Kind = _penKind == PenKind.Highlighter ? PenKind.Highlighter : PenKind.Hard,
+            Color = _penColor
+        };
+        draft.Points.Add(p);
+
+        InkLayer.Children.Add(line);
+        return draft;
+    }
+
+    /// <summary>贴边画线中：指针投影到尺边上（钳在尺边范围内）作为终点，实时刷新直线与长度读数。</summary>
+    private void UpdateRulerSnap(Point p)
+    {
+        double proj = (p.X - _snapEdgeStart.X) * _snapEdgeDir.X + (p.Y - _snapEdgeStart.Y) * _snapEdgeDir.Y;
+        proj = Math.Clamp(proj, 0, _snapEdgeLen);
+        var end = new Point(_snapEdgeStart.X + _snapEdgeDir.X * proj, _snapEdgeStart.Y + _snapEdgeDir.Y * proj);
+
+        // 密化轮廓点，橡皮的逐点命中判定与切割直接复用
+        var points = DensifySegment(_snapStart, end);
+        var draft = _shapeDraft!;
+        draft.Points.Clear();
+        draft.Points.AddRange(points);
+        var line = (Polyline)draft.Visual;
+        line.Points.Clear();
+        foreach (var q in points) line.Points.Add(q);
+
+        UpdateSnapLabel(end, Distance(_snapStart, end));
+    }
+
+    /// <summary>显示/刷新长度读数：厘米为单位，精确到小数点后两位，颜色跟随当前画笔。</summary>
+    private void UpdateSnapLabel(Point end, double lengthPx)
+    {
+        if (_snapLabel is null)
+        {
+            _snapLabel = new TextBlock
+            {
+                FontSize = 13,
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                Foreground = new SolidColorBrush(_penColor),
+                IsHitTestVisible = false
+            };
+            RulerLayer.Children.Add(_snapLabel);
+        }
+        _snapLabel.Text = $"{lengthPx / RulerCmPx:0.00}";
+        Canvas.SetLeft(_snapLabel, end.X + _snapOutward.X * 30 - 14);
+        Canvas.SetTop(_snapLabel, end.Y + _snapOutward.Y * 30 - 9);
+    }
+
+    private void HideSnapLabel()
+    {
+        if (_snapLabel is null) return;
+        RulerLayer.Children.Remove(_snapLabel);
+        _snapLabel = null;
+    }
+
+    // ---- 圆规 ----
+
+    /// <summary>「圆规」：在画布中央召唤/收回一只圆规。</summary>
+    private void OnCompassOptionPressed(object sender, PointerRoutedEventArgs e)
+    {
+        e.Handled = true;
+        if (_compass is not null)
+        {
+            HideCompass();
+            return;
+        }
+        _compassHalfAngle = CompassDefaultHalfAngle;
+        _compassAngle = 0;
+        // 让针尖与笔尖的连线中点大致落在画布中心
+        _compassNeedle = new Point(
+            Root.ActualWidth / 2 - CompassRadiusPx,
+            Root.ActualHeight / 2 + 40);
+        _compass = BuildCompass();
+        RulerLayer.Children.Add(_compass);
+        ApplyCompassTransform();
+        CompassOption.Background = ShapeActiveBrush;
+    }
+
+    private void HideCompass()
+    {
+        if (_compass is null) return;
+        if (_rulerGesture == RulerGesture.CompassDraw)
+        {
+            FinishStroke();
+            _compassStroke = null;
+        }
+        _rulerGesture = RulerGesture.None;
+        RulerLayer.Children.Remove(_compass);
+        _compass = null;
+        _compassRadiusLine = null;
+        _compassRadiusLabel = null;
+        _compassHalfAngle = CompassDefaultHalfAngle;
+        _compassAngle = 0;
+        CompassOption.Background = TransparentBrush;
+    }
+
+    /// <summary>开口半径：针尖到笔尖的距离（逻辑像素）。</summary>
+    private double CompassRadiusPx => 2 * CompassLegLength * Math.Sin(_compassHalfAngle * Math.PI / 180);
+
+    /// <summary>针尖在圆规容器内的局部坐标。</summary>
+    private Point CompassNeedleLocal()
+    {
+        double theta = _compassHalfAngle * Math.PI / 180;
+        return new Point(
+            _compass!.Width / 2 - CompassLegLength * Math.Sin(theta),
+            CompassPivotTop + CompassLegLength * Math.Cos(theta));
+    }
+
+    /// <summary>笔尖在画布坐标中的位置（随圆规整体旋转变化）。</summary>
+    private Point CompassPencilCanvasPos()
+    {
+        double rad = _compassAngle * Math.PI / 180;
+        double r = CompassRadiusPx;
+        return new Point(
+            _compassNeedle.X + r * Math.Cos(rad),
+            _compassNeedle.Y + r * Math.Sin(rad));
+    }
+
+    /// <summary>指针相对针尖（圆心）的角度。</summary>
+    private double PointerAngleToCompassCenter(Point pt) =>
+        Math.Atan2(pt.Y - _compassNeedle.Y, pt.X - _compassNeedle.X) * 180 / Math.PI;
+
+    /// <summary>刷新圆规的旋转（绕针尖）与位置（针尖对准 _compassNeedle）。</summary>
+    private void ApplyCompassTransform()
+    {
+        if (_compass is null) return;
+        var n = CompassNeedleLocal();
+        _compass.RenderTransform = new RotateTransform { Angle = _compassAngle, CenterX = n.X, CenterY = n.Y };
+        Canvas.SetLeft(_compass, _compassNeedle.X - n.X);
+        Canvas.SetTop(_compass, _compassNeedle.Y - n.Y);
+    }
+
+    /// <summary>开口变化后重建圆规：针尖位置与旋转角保持不变（捕获在尺规图层上，重建不丢手势）。</summary>
+    private void RebuildCompass()
+    {
+        if (_compass is null) return;
+        RulerLayer.Children.Remove(_compass);
+        _compass = BuildCompass();
+        RulerLayer.Children.Add(_compass);
+        ApplyCompassTransform();
+    }
+
+    /// <summary>虚连线与半径读数跟随当前画笔颜色（换色时同步刷新）。</summary>
+    private void UpdateCompassInkColor()
+    {
+        if (_compassRadiusLine is null || _compassRadiusLabel is null) return;
+        _compassRadiusLine.Stroke = new SolidColorBrush(_penColor);
+        _compassRadiusLabel.Foreground = new SolidColorBrush(_penColor);
+    }
+
+    /// <summary>把柄处的移动按钮：按住直接拖动整只圆规。</summary>
+    private void OnCompassMovePressed(object sender, PointerRoutedEventArgs e)
+    {
+        e.Handled = true;
+        if (_compass is null) return;
+        _gestureStart = e.GetCurrentPoint(RulerLayer).Position;
+        _gestureStartLeft = _compassNeedle.X;
+        _gestureStartTop = _compassNeedle.Y;
+        _rulerGesture = RulerGesture.CompassDrag;
+        RulerLayer.CapturePointer(e.Pointer);
+    }
+
+    /// <summary>笔尖侧边的调整按钮：按住左右滑动调整圆规开口大小。</summary>
+    private void OnCompassResizePressed(object sender, PointerRoutedEventArgs e)
+    {
+        e.Handled = true;
+        if (_compass is null) return;
+        _gestureStart = e.GetCurrentPoint(RulerLayer).Position;
+        _gestureStartHalfAngle = _compassHalfAngle;
+        _rulerGesture = RulerGesture.CompassResize;
+        RulerLayer.CapturePointer(e.Pointer);
+    }
+
+    /// <summary>笔尖（含黑色保护壳）按下：以针尖为圆心旋转画弧，
+    /// 落笔时先在圆心（针尖）与笔尖各点一个笔迹点。</summary>
+    private void OnCompassDrawPressed(object sender, PointerRoutedEventArgs e)
+    {
+        e.Handled = true;
+        if (_compass is null) return;
+        _compassLastPointerAngle = PointerAngleToCompassCenter(e.GetCurrentPoint(RulerLayer).Position);
+        // 圆心落点：单点笔迹在 FinishStroke 中补成圆点
+        _current = BeginStroke(_compassNeedle);
+        FinishStroke();
+        // 笔尖落点：画弧的起笔点
+        _current = BeginStroke(CompassPencilCanvasPos());
+        _compassStroke = _current;
+        _rulerGesture = RulerGesture.CompassDraw;
+        RulerLayer.CapturePointer(e.Pointer);
+    }
+
+    /// <summary>关闭按钮：收回圆规。</summary>
+    private void OnCompassClosePressed(object sender, PointerRoutedEventArgs e)
+    {
+        e.Handled = true;
+        HideCompass();
+    }
+
+    /// <summary>圆规主体（尺腿/铰链/捏柄）按下：只吞掉事件，不在圆规上画出笔迹。</summary>
+    private static void OnCompassBodyPressed(object sender, PointerRoutedEventArgs e) => e.Handled = true;
+
+    /// <summary>生成一只圆规：顶部为关闭按钮与白色捏柄，深色铰链内嵌移动按钮；
+    /// 两条尺腿下端分别为金属针尖与带黑色保护壳的铅笔笔尖，笔尖旁为开口调整按钮；
+    /// 针尖与笔尖之间用虚线连接并标注半径读数（颜色跟随画笔）。</summary>
+    private Canvas BuildCompass()
+    {
+        double theta = _compassHalfAngle * Math.PI / 180;
+        double sin = Math.Sin(theta), cos = Math.Cos(theta);
+        double width = 2 * CompassLegLength * sin + 170;
+        double height = CompassPivotTop + CompassLegLength * cos + 46;
+        double halfW = width / 2;
+        double tipsY = CompassPivotTop + CompassLegLength * cos;
+        double needleX = halfW - CompassLegLength * sin;
+        double pencilX = halfW + CompassLegLength * sin;
+
+        var root = new Canvas { Width = width, Height = height };
+
+        // 针尖—笔尖虚连线（压在尺腿下面）
+        _compassRadiusLine = new Polyline
+        {
+            StrokeThickness = 2.5,
+            StrokeDashArray = [4, 3],
+            IsHitTestVisible = false
+        };
+        _compassRadiusLine.Points.Add(new Point(needleX, tipsY));
+        _compassRadiusLine.Points.Add(new Point(pencilX, tipsY));
+        root.Children.Add(_compassRadiusLine);
+
+        // 两条尺腿（绕铰链各向左右张开半角）
+        root.Children.Add(BuildCompassLeg(-_compassHalfAngle, halfW, true));
+        root.Children.Add(BuildCompassLeg(_compassHalfAngle, halfW, false));
+
+        // 深色铰链
+        var hinge = new Border
+        {
+            Width = 76,
+            Height = 88,
+            CornerRadius = new CornerRadius(20),
+            Background = new SolidColorBrush(Color.FromArgb(0xFF, 0x3C, 0x40, 0x48))
+        };
+        Canvas.SetLeft(hinge, halfW - 38);
+        Canvas.SetTop(hinge, CompassPivotTop - 44);
+        hinge.PointerPressed += OnCompassBodyPressed;
+        root.Children.Add(hinge);
+
+        // 把柄处的移动按钮（按住拖动整只圆规）
+        var moveIcon = BuildCompassMoveIcon();
+        moveIcon.HorizontalAlignment = HorizontalAlignment.Center;
+        moveIcon.VerticalAlignment = VerticalAlignment.Center;
+        var move = new Border
+        {
+            Width = 46,
+            Height = 46,
+            CornerRadius = new CornerRadius(23),
+            Background = new SolidColorBrush(Color.FromArgb(0xFF, 0x56, 0x5C, 0x66)),
+            Child = moveIcon
+        };
+        ToolTipService.SetToolTip(move, "按住拖动圆规");
+        Canvas.SetLeft(move, halfW - 23);
+        Canvas.SetTop(move, CompassPivotTop - 23);
+        move.PointerPressed += OnCompassMovePressed;
+        root.Children.Add(move);
+
+        // 白色捏柄（纯装饰）
+        var knob = new Border
+        {
+            Width = 18,
+            Height = 26,
+            CornerRadius = new CornerRadius(9),
+            Background = new SolidColorBrush(Color.FromArgb(0xFF, 0xF2, 0xF3, 0xF5)),
+            BorderBrush = new SolidColorBrush(Color.FromArgb(0xFF, 0xD7, 0xDA, 0xDE)),
+            BorderThickness = new Thickness(1)
+        };
+        Canvas.SetLeft(knob, halfW - 9);
+        Canvas.SetTop(knob, CompassPivotTop - 76);
+        knob.PointerPressed += OnCompassBodyPressed;
+        root.Children.Add(knob);
+
+        // 关闭按钮
+        var close = MakeRulerButton(BuildRulerCloseIcon(), "收回圆规", OnCompassClosePressed);
+        Canvas.SetLeft(close, halfW - 13);
+        Canvas.SetTop(close, 8);
+        root.Children.Add(close);
+
+        // 开口调整按钮（笔尖侧边）
+        var resize = MakeRulerButton(BuildRulerExpandIcon(), "按住左右滑动调整开口", OnCompassResizePressed);
+        Canvas.SetLeft(resize, halfW + 0.58 * CompassLegLength * sin + 34);
+        Canvas.SetTop(resize, CompassPivotTop + 0.58 * CompassLegLength * cos - 13);
+        root.Children.Add(resize);
+
+        // 半径读数
+        _compassRadiusLabel = new TextBlock
+        {
+            FontSize = 14,
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+            Text = $"r={CompassRadiusPx / RulerCmPx:0.0}",
+            IsHitTestVisible = false
+        };
+        Canvas.SetLeft(_compassRadiusLabel, halfW - 20);
+        Canvas.SetTop(_compassRadiusLabel, tipsY + 10);
+        root.Children.Add(_compassRadiusLabel);
+
+        // 笔尖命中区（含黑色保护壳）：按住旋转画弧
+        var drawZone = new Border
+        {
+            Width = 46,
+            Height = 46,
+            CornerRadius = new CornerRadius(23),
+            Background = TransparentBrush
+        };
+        ToolTipService.SetToolTip(drawZone, "按住旋转画圆");
+        Canvas.SetLeft(drawZone, pencilX - 23);
+        Canvas.SetTop(drawZone, tipsY - 49);
+        drawZone.PointerPressed += OnCompassDrawPressed;
+        root.Children.Add(drawZone);
+
+        UpdateCompassInkColor();
+        return root;
+    }
+
+    /// <summary>生成一条尺腿：左针腿末端为金属针尖，右笔腿末端为带黑色保护壳的铅笔。整体绕铰链旋转 angle。</summary>
+    private Canvas BuildCompassLeg(double angle, double pivotX, bool needle)
+    {
+        var leg = new Canvas { Width = 30, Height = 24 + CompassLegLength };
+
+        var bar = new Border
+        {
+            Width = 24,
+            Height = CompassLegLength - 6,
+            CornerRadius = new CornerRadius(12),
+            Background = new SolidColorBrush(Color.FromArgb(0xFF, 0xF2, 0xF3, 0xF5)),
+            BorderBrush = new SolidColorBrush(Color.FromArgb(0xFF, 0xD7, 0xDA, 0xDE)),
+            BorderThickness = new Thickness(1)
+        };
+        Canvas.SetLeft(bar, 3);
+        Canvas.SetTop(bar, 24);
+        leg.Children.Add(bar);
+
+        if (needle)
+        {
+            var collar = new Border
+            {
+                Width = 18,
+                Height = 12,
+                CornerRadius = new CornerRadius(3),
+                Background = new SolidColorBrush(Color.FromArgb(0xFF, 0xC9, 0xCC, 0xD2))
+            };
+            Canvas.SetLeft(collar, 6);
+            Canvas.SetTop(collar, 24 + CompassLegLength - 40);
+            leg.Children.Add(collar);
+
+            // 金属针尖：细长三角刺出尺腿末端
+            leg.Children.Add(new Polygon
+            {
+                Points = new PointCollection
+                {
+                    new Point(15, 24 + CompassLegLength),
+                    new Point(11, 24 + CompassLegLength - 30),
+                    new Point(19, 24 + CompassLegLength - 30)
+                },
+                Fill = new SolidColorBrush(Color.FromArgb(0xFF, 0x87, 0x8C, 0x95))
+            });
+        }
+        else
+        {
+            var pencil = new Border
+            {
+                Width = 30,
+                Height = 110,
+                CornerRadius = new CornerRadius(9),
+                Background = new SolidColorBrush(Color.FromArgb(0xFF, 0xED, 0xEF, 0xF2)),
+                BorderBrush = new SolidColorBrush(Color.FromArgb(0xFF, 0xD0, 0xD3, 0xD8)),
+                BorderThickness = new Thickness(1)
+            };
+            Canvas.SetLeft(pencil, 0);
+            Canvas.SetTop(pencil, 24 + CompassLegLength - 162);
+            leg.Children.Add(pencil);
+
+            // 黑色保护壳
+            var sheath = new Border
+            {
+                Width = 30,
+                Height = 40,
+                CornerRadius = new CornerRadius(8),
+                Background = new SolidColorBrush(Color.FromArgb(0xFF, 0x2E, 0x31, 0x38))
+            };
+            Canvas.SetLeft(sheath, 0);
+            Canvas.SetTop(sheath, 24 + CompassLegLength - 54);
+            leg.Children.Add(sheath);
+
+            // 铅笔笔尖
+            leg.Children.Add(new Polygon
+            {
+                Points = new PointCollection
+                {
+                    new Point(15, 24 + CompassLegLength),
+                    new Point(6, 24 + CompassLegLength - 18),
+                    new Point(24, 24 + CompassLegLength - 18)
+                },
+                Fill = new SolidColorBrush(Color.FromArgb(0xFF, 0x4A, 0x4E, 0x56))
+            });
+        }
+
+        // 绕铰链点旋转：局部坐标 (15,24) 对准容器中的铰链位置
+        leg.RenderTransform = new RotateTransform { Angle = angle, CenterX = 15, CenterY = 24 };
+        Canvas.SetLeft(leg, pivotX - 15);
+        Canvas.SetTop(leg, CompassPivotTop - 24);
+        leg.PointerPressed += OnCompassBodyPressed;
+        return leg;
+    }
+
+    /// <summary>移动按钮图标：白色四向箭头。</summary>
+    private static Viewbox BuildCompassMoveIcon()
+    {
+        var stroke = new SolidColorBrush(Color.FromArgb(0xFF, 0xFF, 0xFF, 0xFF));
+        var canvas = new Canvas { Width = 24, Height = 24 };
+        void Add(double x1, double y1, double x2, double y2) => canvas.Children.Add(
+            new Line
+            {
+                X1 = x1, Y1 = y1, X2 = x2, Y2 = y2,
+                Stroke = stroke,
+                StrokeThickness = 2.2,
+                StrokeStartLineCap = PenLineCap.Round,
+                StrokeEndLineCap = PenLineCap.Round
+            });
+        Add(12, 3.5, 12, 20.5);   // 竖杆
+        Add(3.5, 12, 20.5, 12);   // 横杆
+        Add(12, 3.5, 9, 6.5);     // 上箭头
+        Add(12, 3.5, 15, 6.5);
+        Add(12, 20.5, 9, 17.5);   // 下箭头
+        Add(12, 20.5, 15, 17.5);
+        Add(3.5, 12, 6.5, 9);     // 左箭头
+        Add(3.5, 12, 6.5, 15);
+        Add(20.5, 12, 17.5, 9);   // 右箭头
+        Add(20.5, 12, 17.5, 15);
+        return new Viewbox { Width = 20, Height = 20, Child = canvas };
+    }
 
     /// <summary>从右侧滑出：面板贴右侧工具栏，向左位移归位并淡入。</summary>
     private void ShowSlidePanel(Border panel)
@@ -445,6 +1552,7 @@ public sealed partial class AnnotationCanvasWindow : Window
         _penColor = args.NewColor;
         RefreshAccent();
         UpdateSwatchSelection();
+        UpdateCompassInkColor();
     }
 
     /// <summary>强调色（默认跟随画笔颜色）刷新所有共用画刷；画刷是共享实例，改 Color 即全局生效。</summary>
@@ -457,6 +1565,9 @@ public sealed partial class AnnotationCanvasWindow : Window
         _toolCheckedHoverBrush.Color = WithAlpha(accent, 0x24);
         _toolCheckedPressedBrush.Color = WithAlpha(accent, 0x32);
     }
+
+    /// <summary>应用强调色变化：批注工具选中态同步到统一主题强调色。</summary>
+    private void OnAppThemeChanged(object? sender, EventArgs e) => ThemeAccent = AppTheme.AccentColor;
 
     /// <summary>保留透明度、替换 RGB，用于由强调色派生各档选中态底色。</summary>
     private static Color WithAlpha(Color color, byte alpha) => Color.FromArgb(alpha, color.R, color.G, color.B);
@@ -586,6 +1697,7 @@ public sealed partial class AnnotationCanvasWindow : Window
             if (_colorPicker is not null) _colorPicker.Color = _penColor;
             RefreshAccent();
             UpdateSwatchSelection();
+            UpdateCompassInkColor();
             e.Handled = true;
         }
     }
@@ -664,7 +1776,18 @@ public sealed partial class AnnotationCanvasWindow : Window
                 break;
 
             case AnnotationTool.Pen:
-                _current = BeginStroke(position);
+                // 落笔在尺子刻度边附近：贴边画直线；否则正常自由笔迹
+                if (TrySnapToRulerEdge(position) is { } snapStart)
+                {
+                    _rulerSnapActive = true;
+                    _snapStart = snapStart;
+                    _shapeDraft = BeginSnapDraft(snapStart);
+                    UpdateSnapLabel(snapStart, 0);
+                }
+                else
+                {
+                    _current = BeginStroke(position);
+                }
                 break;
 
             case AnnotationTool.Shapes:
@@ -691,7 +1814,7 @@ public sealed partial class AnnotationCanvasWindow : Window
         };
         if (_shapeKind is ShapeKind.DashedArrow or ShapeKind.DashedLine)
         {
-            line.StrokeDashArray = new DoubleCollection { 3, 2 };
+            line.StrokeDashArray = [3, 2];
         }
         line.Points.Add(p);
 
@@ -739,7 +1862,7 @@ public sealed partial class AnnotationCanvasWindow : Window
             {
                 ShapeBounds(a, b, out double x1, out double y1, out double x2, out double y2);
                 return DensifyPath(
-                    new[] { new Point(x1, y1), new Point(x2, y1), new Point(x2, y2), new Point(x1, y2) }, closed: true);
+                    [new Point(x1, y1), new Point(x2, y1), new Point(x2, y2), new Point(x1, y2)], closed: true);
             }
 
             case ShapeKind.RoundedRectangle:
@@ -752,14 +1875,14 @@ public sealed partial class AnnotationCanvasWindow : Window
             {
                 ShapeBounds(a, b, out double x1, out double y1, out double x2, out double y2);
                 return DensifyPath(
-                    new[] { new Point((x1 + x2) / 2, y1), new Point(x2, y2), new Point(x1, y2) }, closed: true);
+                    [new Point((x1 + x2) / 2, y1), new Point(x2, y2), new Point(x1, y2)], closed: true);
             }
 
             case ShapeKind.RightTriangle:
             {
                 ShapeBounds(a, b, out double x1, out double y1, out double x2, out double y2);
                 return DensifyPath(
-                    new[] { new Point(x1, y1), new Point(x1, y2), new Point(x2, y2) }, closed: true);
+                    [new Point(x1, y1), new Point(x1, y2), new Point(x2, y2)], closed: true);
             }
 
             case ShapeKind.Circle:
@@ -789,7 +1912,7 @@ public sealed partial class AnnotationCanvasWindow : Window
     /// <summary>把一段直线密化成间距 ≤ 6px 的点列（含两端点）。</summary>
     private static List<Point> DensifySegment(Point a, Point b)
     {
-        var points = new List<Point> { a };
+        List<Point> points = [a];
         double length = Distance(a, b);
         int steps = (int)(length / ShapeSampleStep);
         for (int i = 1; i <= steps; i++)
@@ -851,7 +1974,7 @@ public sealed partial class AnnotationCanvasWindow : Window
         if (r < 0.5)
         {
             return DensifyPath(
-                new[] { new Point(x1, y1), new Point(x2, y1), new Point(x2, y2), new Point(x1, y2) }, closed: true);
+                [new Point(x1, y1), new Point(x2, y1), new Point(x2, y2), new Point(x1, y2)], closed: true);
         }
 
         var corners = new List<Point>();
@@ -1205,6 +2328,12 @@ public sealed partial class AnnotationCanvasWindow : Window
             return;
         }
 
+        if (_rulerSnapActive)
+        {
+            UpdateRulerSnap(p);
+            return;
+        }
+
         if (_shapeDraft is not null)
         {
             UpdateShapeDraft(p);
@@ -1242,6 +2371,13 @@ public sealed partial class AnnotationCanvasWindow : Window
     /// 几何图形草稿在此提交：太短视为误触直接丢弃，否则作为一条可撤销的笔迹入栈。</summary>
     private void FinishStroke()
     {
+        // 贴边画线结束：复位吸附状态并隐藏长度读数（草稿按下方图形流程提交）
+        if (_rulerSnapActive)
+        {
+            _rulerSnapActive = false;
+            HideSnapLabel();
+        }
+
         if (_shapeDraft is not null)
         {
             var draft = _shapeDraft;
@@ -1296,17 +2432,26 @@ public sealed partial class AnnotationCanvasWindow : Window
             var fragments = FragmentStroke(stroke, position);
             if (fragments is null) continue;      // 没擦到，保持原样
 
+            // 记录原位：片段视觉插回被擦笔迹原来的图层位置，保证批注层级固定、后画恒覆盖先画
+            int visualIndex = InkLayer.Children.IndexOf(stroke.Visual);
             _strokes.RemoveAt(i);
             InkLayer.Children.Remove(stroke.Visual);
 
             // 拖动中切出来的片段再被切时，只需从片段集合里摘掉，撤销时才能还原到拖动前的状态
-            if (!_eraseFragments.Remove(stroke)) _eraseRemoved.Add(stroke);
+            if (!_eraseFragments.Remove(stroke))
+            {
+                _eraseRemoved.Add(stroke);
+                _eraseRemovedIndex[stroke] = i;
+            }
+            _eraseFragmentIndex.Remove(stroke);
 
             for (int f = 0; f < fragments.Count; f++)
             {
                 _strokes.Insert(i + f, fragments[f]);
-                InkLayer.Children.Add(fragments[f].Visual);
+                if (visualIndex >= 0) InkLayer.Children.Insert(visualIndex + f, fragments[f].Visual);
+                else InkLayer.Children.Add(fragments[f].Visual);
                 _eraseFragments.Add(fragments[f]);
+                _eraseFragmentIndex[fragments[f]] = i + f;
             }
             _redo.Clear();
         }
@@ -1410,7 +2555,7 @@ public sealed partial class AnnotationCanvasWindow : Window
             // 虚线类图形的片段保持虚线样式
             if (source.Shape is ShapeKind.DashedArrow or ShapeKind.DashedLine)
             {
-                line.StrokeDashArray = new DoubleCollection { 3, 2 };
+                line.StrokeDashArray = [3, 2];
             }
             foreach (var p in points) line.Points.Add(p);
         }
@@ -1421,34 +2566,50 @@ public sealed partial class AnnotationCanvasWindow : Window
         return fragment;
     }
 
-    /// <summary>一次橡皮拖动结束后合并成一条撤销记录。</summary>
+    /// <summary>一次橡皮拖动结束后合并成一条撤销记录；撤销/重做都按原始下标恢复，层级保持稳定。</summary>
     private void CommitErase()
     {
         if (_eraseRemoved.Count == 0) return;
 
-        var removed = _eraseRemoved.ToList();
-        var fragments = _eraseFragments.ToList();
+        var removed = _eraseRemoved
+            .OrderBy(s => _eraseRemovedIndex.TryGetValue(s, out var idx) ? idx : int.MaxValue)
+            .Select(s => (stroke: s, index: _eraseRemovedIndex.TryGetValue(s, out var idx) ? idx : int.MaxValue))
+            .ToList();
+        var fragments = _eraseFragments
+            .OrderBy(s => _eraseFragmentIndex.TryGetValue(s, out var idx) ? idx : int.MaxValue)
+            .Select(s => (stroke: s, index: _eraseFragmentIndex.TryGetValue(s, out var idx) ? idx : int.MaxValue))
+            .ToList();
         _eraseRemoved.Clear();
         _eraseFragments.Clear();
+        _eraseRemovedIndex.Clear();
+        _eraseFragmentIndex.Clear();
 
         _undo.Push(new EditAction(
             () =>
             {
-                foreach (var f in fragments) DetachStroke(f);
-                foreach (var s in removed) AttachStroke(s);
+                foreach (var f in fragments) DetachStroke(f.stroke);
+                foreach (var s in removed) AttachStrokeAt(s.stroke, s.index);
             },
             () =>
             {
-                foreach (var s in removed) DetachStroke(s);
-                foreach (var f in fragments) AttachStroke(f);
+                foreach (var s in removed) DetachStroke(s.stroke);
+                foreach (var f in fragments) AttachStrokeAt(f.stroke, f.index);
             }));
     }
 
-    /// <summary>将笔迹挂回集合与画布（撤销/重做共用）。</summary>
+    /// <summary>将笔迹挂回集合与画布（撤销/重做共用）：追加到顶层，用于新笔迹。</summary>
     private void AttachStroke(InkStroke stroke)
     {
         _strokes.Add(stroke);
         InkLayer.Children.Add(stroke.Visual);
+    }
+
+    /// <summary>将笔迹按原始下标挂回集合与画布（橡皮撤销/重做共用）：层级与擦除前一致。</summary>
+    private void AttachStrokeAt(InkStroke stroke, int index)
+    {
+        int at = Math.Min(index, _strokes.Count);
+        _strokes.Insert(at, stroke);
+        InkLayer.Children.Insert(Math.Min(at, InkLayer.Children.Count), stroke.Visual);
     }
 
     /// <summary>从集合与画布移除笔迹（撤销/重做共用）。</summary>

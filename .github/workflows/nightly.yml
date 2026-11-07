@@ -1,0 +1,74 @@
+name: ClassDock Nightly
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  nightly:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Build Debug
+        run: dotnet build --configuration Debug
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+          $zipName = "ClassDock-Nightly-${timestamp}-win-x64.zip"
+
+          $publishDir = "bin\Debug\net10.0-windows10.0.19041.0\win-x64"
+
+          if (-not (Test-Path $publishDir)) {
+            Write-Error "未找到构建输出目录: $publishDir"
+            exit 1
+          }
+
+          Compress-Archive -Path "$publishDir\*" -DestinationPath $zipName -Force
+
+          echo "ZIP_NAME=$zipName" >> $env:GITHUB_ENV
+          echo "COMMIT_MSG<<EOF" >> $env:GITHUB_ENV
+          git log -1 --pretty=%B >> $env:GITHUB_ENV
+          echo "EOF" >> $env:GITHUB_ENV
+
+      - name: Delete old nightly release
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $release = gh release view nightly --json id -q .id 2>$null
+          if ($release) {
+            gh release delete nightly --yes
+          }
+
+      - name: Create nightly release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: nightly
+          name: ClassDock Nightly
+          prerelease: true
+          generate_release_notes: false
+          body: |
+            > [!CAUTION]
+            > 这是自动构建的 Nightly 预览版本，无法保证稳定性，请勿提交此版本的 Issues。
+
+            构建时间：${{ github.event.head_commit.timestamp }}
+
+            提交信息：
+            ${{ env.COMMIT_MSG }}
+          files: |
+            ${{ env.ZIP_NAME }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

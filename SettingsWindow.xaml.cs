@@ -2,6 +2,7 @@ using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Media;
 using System.Runtime.InteropServices;
 using Windows.UI;
@@ -18,15 +19,16 @@ public sealed partial class SettingsWindow : Window
     [DllImport("user32.dll")]
     private static extern uint GetDpiForWindow(IntPtr hwnd);
 
-    private static readonly SolidColorBrush AccentBrush
-        = new(Color.FromArgb(0xFF, 0x00, 0x78, 0xD4));
-    private static readonly SolidColorBrush SelectedBackground
-        = new(Color.FromArgb(0xFF, 0xFF, 0xFF, 0xFF));
+    private static readonly SolidColorBrush SelectedBackground = new();
     private static readonly SolidColorBrush TransparentBrush = new(Colors.Transparent);
 
     private Button? _selectedNav;       // 当前选中的导航按钮（用于切换选中态底色）
     private Border? _selectedAccent;    // 当前选中按钮的强调色竖条
     private bool _loadingSettings;      // 加载设置中，屏蔽 Checked 回调以避免误触保存
+    private bool _loadingAppearance;    // 加载外观设置中，屏蔽主题控件的 SelectionChanged
+
+    private ColorPicker? _accentPicker;
+    private Flyout? _accentFlyout;
 
     // 侧边栏收起状态与两个分组的展开状态
     private bool _collapsed;
@@ -44,25 +46,22 @@ public sealed partial class SettingsWindow : Window
     public SettingsWindow()
     {
         InitializeComponent();
+        App.ApplyWindowIcon(AppWindow);
+
+        // 接入统一主题：明暗与强调色由 AppTheme 统一下发，窗口根元素跟随切换
+        AppTheme.Apply(Root);
+        AppTheme.Changed += OnAppThemeChanged;
+        Closed += (_, _) =>
+        {
+            AppTheme.Changed -= OnAppThemeChanged;
+            AppTheme.Unapply(Root);
+        };
 
         // 标题栏合并：AppTitleBar 作为拖拽区，右上角三个按键由系统绘制
+        // 必须先开启内容延伸，之后才能调整标题栏按键配色与高度
         ExtendsContentIntoTitleBar = true;
-        // 浅色主题下的按键配色（透明底 + 深色图标，与浅色顶栏融合）
-        var tb = AppWindow.TitleBar;
-        tb.BackgroundColor = Colors.Transparent;
-        tb.ForegroundColor = Colors.Transparent;
-        tb.InactiveBackgroundColor = Colors.Transparent;
-        tb.InactiveForegroundColor = Colors.Transparent;
-        tb.ButtonBackgroundColor = Colors.Transparent;
-        tb.ButtonInactiveBackgroundColor = Colors.Transparent;
-        tb.ButtonForegroundColor = Color.FromArgb(230, 0, 0, 0);
-        tb.ButtonHoverBackgroundColor = Color.FromArgb(26, 0, 0, 0);
-        tb.ButtonHoverForegroundColor = Colors.Black;
-        tb.ButtonPressedBackgroundColor = Color.FromArgb(13, 0, 0, 0);
-        tb.ButtonInactiveForegroundColor = Color.FromArgb(128, 0, 0, 0);
-
-        // 顶栏行高 48 DIP，系统按键同步加高，使版本号文字与三键垂直居中对齐
-        tb.PreferredHeightOption = TitleBarHeightOption.Tall;
+        AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Tall;
+        OnAppThemeChanged(null, EventArgs.Empty);
 
         // 居中显示（保持默认可调/可最大化，确保“最大化/还原”可用）
         // 尺寸按 DPI 换算成物理像素，避免高缩放下窗口内容被挤小
@@ -79,6 +78,51 @@ public sealed partial class SettingsWindow : Window
         // 默认选中“关于 ClassDock”
         SelectNav(NavAbout, AboutAccent);
         LoadCrashBehavior();
+        AllowMultiInstanceSwitch.IsOn = AppSettings.AllowMultiInstance;
+        LoadAppearanceSettings();
+    }
+
+    /// <summary>系统标题栏按键配色：透明底，前景随明暗主题；顶栏行高 48 DIP 同步加高。</summary>
+    private void ApplyTitleBarColors()
+    {
+        var tb = AppWindow.TitleBar;
+        bool dark = AppTheme.IsDark;
+        tb.BackgroundColor = Colors.Transparent;
+        tb.ForegroundColor = Colors.Transparent;
+        tb.InactiveBackgroundColor = Colors.Transparent;
+        tb.InactiveForegroundColor = Colors.Transparent;
+        tb.ButtonBackgroundColor = Colors.Transparent;
+        tb.ButtonInactiveBackgroundColor = Colors.Transparent;
+        tb.ButtonForegroundColor = dark ? Colors.White : Color.FromArgb(230, 0, 0, 0);
+        tb.ButtonInactiveForegroundColor = dark
+            ? Color.FromArgb(128, 255, 255, 255)
+            : Color.FromArgb(128, 0, 0, 0);
+        tb.ButtonHoverBackgroundColor = dark
+            ? Color.FromArgb(26, 255, 255, 255)
+            : Color.FromArgb(26, 0, 0, 0);
+        tb.ButtonHoverForegroundColor = dark ? Colors.White : Colors.Black;
+        tb.ButtonPressedBackgroundColor = dark
+            ? Color.FromArgb(51, 255, 255, 255)
+            : Color.FromArgb(13, 0, 0, 0);
+        tb.ButtonPressedForegroundColor = dark ? Colors.White : Colors.Black;
+    }
+
+    /// <summary>主题或强调色变化：同步选中底色、标题栏与强调色预览。</summary>
+    private void OnAppThemeChanged(object? sender, EventArgs e)
+    {
+        SelectedBackground.Color = AppTheme.IsDark
+            ? Color.FromArgb(0xFF, 0x38, 0x38, 0x38)
+            : Color.FromArgb(0xFF, 0xFF, 0xFF, 0xFF);
+        ApplyTitleBarColors();
+        UpdateAccentVisuals();
+        if (_accentPicker is not null) _accentPicker.RequestedTheme = AppTheme.CurrentElementTheme;
+    }
+
+    /// <summary>「允许多开实例」开关：即时生效并持久化；开启后重复启动不再提示。</summary>
+    private void OnAllowMultiInstanceToggled(object sender, RoutedEventArgs e)
+    {
+        AppSettings.AllowMultiInstance = AllowMultiInstanceSwitch.IsOn;
+        AppSettings.Save();
     }
 
     /// <summary>导航按钮点击：切换右侧内容页与选中态。</summary>
@@ -104,11 +148,12 @@ public sealed partial class SettingsWindow : Window
     private void ShowPage(string tag)
     {
         AboutPage.Visibility = tag == "about" ? Visibility.Visible : Visibility.Collapsed;
+        AppearancePage.Visibility = tag == "appearance" ? Visibility.Visible : Visibility.Collapsed;
         DebugPage.Visibility = tag == "debug" ? Visibility.Visible : Visibility.Collapsed;
         BlankPage.Visibility = tag == "blank" ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    /// <summary>选中态：白色底 + 左侧强调色竖条。</summary>
+    /// <summary>选中态：卡片色底 + 左侧强调色竖条（两者颜色均由统一主题服务提供）。</summary>
     private void SelectNav(Button button, Border? accent)
     {
         if (_selectedNav is not null) _selectedNav.Background = TransparentBrush;
@@ -117,7 +162,7 @@ public sealed partial class SettingsWindow : Window
         _selectedNav = button;
         _selectedAccent = accent;
         button.Background = SelectedBackground;
-        if (accent is not null) accent.Background = AccentBrush;
+        if (accent is not null) accent.Background = AppTheme.AccentBrush;
     }
 
     private void OnGeneralGroupClick(object sender, RoutedEventArgs e)
@@ -295,6 +340,105 @@ public sealed partial class SettingsWindow : Window
         _loadingSettings = false;
     }
 
+    /// <summary>按当前设置初始化外观与动画页的主题控件。</summary>
+    private void LoadAppearanceSettings()
+    {
+        _loadingAppearance = true;
+        ThemeModeCombo.SelectedIndex = AppSettings.ThemeMode switch
+        {
+            AppThemeMode.Light => 1,
+            AppThemeMode.Dark => 2,
+            _ => 0
+        };
+        AccentSourceCombo.SelectedIndex = AppSettings.AccentSource == AccentSourceMode.Custom ? 1 : 0;
+        CustomAccentRow.Visibility = AppSettings.AccentSource == AccentSourceMode.Custom
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        _loadingAppearance = false;
+        UpdateAccentVisuals();
+    }
+
+    /// <summary>刷新强调色预览色块与十六进制文本。</summary>
+    private void UpdateAccentVisuals()
+    {
+        if (AccentSwatch is null) return;
+        var color = AppTheme.AccentColor;
+        AccentSwatch.Background = new SolidColorBrush(color);
+        AccentHexText.Text = $"#{color.R:X2}{color.G:X2}{color.B:X2}";
+    }
+
+    /// <summary>应用主题下拉：跟随系统 / 明亮 / 黑暗，立即生效并持久化。</summary>
+    private void OnThemeModeChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loadingAppearance) return;
+        AppTheme.SetMode(ThemeModeCombo.SelectedIndex switch
+        {
+            1 => AppThemeMode.Light,
+            2 => AppThemeMode.Dark,
+            _ => AppThemeMode.System
+        });
+    }
+
+    /// <summary>主题色来源下拉：系统 / 自定义；自定义时展开强调色参数。</summary>
+    private void OnAccentSourceChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loadingAppearance) return;
+        var source = AccentSourceCombo.SelectedIndex == 1
+            ? AccentSourceMode.Custom
+            : AccentSourceMode.System;
+        CustomAccentRow.Visibility = source == AccentSourceMode.Custom
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        AppTheme.SetAccentSource(source);
+    }
+
+    /// <summary>强调色按钮：弹出由代码创建的圆环选色器（XAML 内联 Flyout/ColorPicker 会让编译器静默崩溃）。</summary>
+    private void OnAccentColorClick(object sender, RoutedEventArgs e)
+    {
+        EnsureAccentPicker();
+        _accentPicker!.Color = AppTheme.CustomAccent;
+        _accentFlyout!.ShowAt(AccentColorButton);
+        // 模板首次应用后才吃 ColorSpectrumShape，打开后再赋一次确保是圆环
+        DispatcherQueue.TryEnqueue(() => _accentPicker!.ColorSpectrumShape = ColorSpectrumShape.Ring);
+    }
+
+    /// <summary>按需创建强调色选色器与承载它的 Flyout。</summary>
+    private void EnsureAccentPicker()
+    {
+        if (_accentFlyout is not null) return;
+
+        _accentPicker = new ColorPicker
+        {
+            Width = 384,
+            Height = 384,
+            MinWidth = 0,
+            MinHeight = 0,
+            IsAlphaEnabled = false,
+            IsColorChannelTextInputVisible = false,
+            IsColorPreviewVisible = false,
+            IsColorSliderVisible = false,
+            IsHexInputVisible = false,
+            IsMoreButtonVisible = false,
+            ColorSpectrumShape = ColorSpectrumShape.Ring,
+            RequestedTheme = AppTheme.CurrentElementTheme
+        };
+        _accentPicker.ColorChanged += OnAccentColorChanged;
+
+        _accentFlyout = new Flyout
+        {
+            Placement = FlyoutPlacementMode.Bottom,
+            Content = new Viewbox { Width = 220, Height = 220, Child = _accentPicker }
+        };
+    }
+
+    /// <summary>选色器颜色变化：写入统一主题服务并持久化。</summary>
+    private void OnAccentColorChanged(ColorPicker sender, ColorChangedEventArgs args)
+    {
+        if (_loadingAppearance) return;
+        AppTheme.SetCustomAccent(args.NewColor);
+        UpdateAccentVisuals();
+    }
+
     private async void OnCrashBehaviorChanged(object sender, RoutedEventArgs e)
     {
         if (_loadingSettings) return;
@@ -304,6 +448,7 @@ public sealed partial class SettingsWindow : Window
             var dialog = new ContentDialog
             {
                 XamlRoot = Content.XamlRoot,
+                RequestedTheme = AppTheme.CurrentElementTheme,
                 Title = "确认选择「不处理」？",
                 PrimaryButtonText = "确认选择",
                 CloseButtonText = "取消",

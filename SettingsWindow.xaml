@@ -5,7 +5,7 @@
     Title="ClassDock 设置">
 
     <!-- 标题栏与三个窗口按键合并：第 0 行为拖拽区（右端只放版本号） -->
-    <Grid x:Name="Root" Background="#FFF9F9F9" RowDefinitions="48,*">
+    <Grid x:Name="Root" Background="{ThemeResource AppPageBackgroundBrush}" RowDefinitions="48,*">
 
         <Grid.Resources>
             <!-- 侧边栏一级条目：20 图标 + 文字，选中态由代码着色 -->
@@ -17,7 +17,7 @@
                 <Setter Property="Background" Value="Transparent" />
                 <Setter Property="BorderThickness" Value="0" />
                 <Setter Property="CornerRadius" Value="6" />
-                <Setter Property="Foreground" Value="#FF2B2B2B" />
+                <Setter Property="Foreground" Value="{ThemeResource AppTextBrush}" />
                 <Setter Property="FontSize" Value="14" />
             </Style>
 
@@ -35,8 +35,8 @@
                 VerticalAlignment="Center"
                 Margin="0,0,156,0"
                 FontSize="12"
-                Foreground="#99000000"
-                Text="0.0.7.0 (Codename PaintingTheWorld)" />
+                Foreground="{ThemeResource AppTertiaryTextBrush}"
+                Text="0.0.7.2 (Codename PaintingTheWorld)" />
         </Grid>
 
         <Grid Grid.Row="1">
@@ -50,8 +50,8 @@
                 x:Name="SidebarPanel"
                 Grid.Column="0"
                 Width="208"
-                Background="#FFF3F3F3"
-                BorderBrush="#14000000"
+                Background="{ThemeResource AppSidebarBackgroundBrush}"
+                BorderBrush="{ThemeResource AppCardBorderBrush}"
                 BorderThickness="0,0,1,0">
                 <Grid Padding="8,8,8,10" RowDefinitions="*,Auto">
 
@@ -71,7 +71,7 @@
                                     Click="OnCollapseToggleClick">
                                     <FontIcon
                                         FontSize="16"
-                                        Foreground="#FF2B2B2B"
+                                        Foreground="{ThemeResource AppTextBrush}"
                                         Glyph="&#xE700;" />
                                 </Button>
                                 <TextBlock
@@ -102,7 +102,7 @@
                                             Width="22"
                                             Height="22"
                                             Data="M10.492 8.91A.5.5 0 0 0 9.5 9v4.502l.008.09a.5.5 0 0 0 .992-.09V9zM10.799 6.75a.75.75 0 1 0-1.5 0a.75.75 0 0 0 1.5 0M18 10a8 8 0 1 0-16 0a8 8 0 0 0 16 0M3 10a7 7 0 1 1 14 0a7 7 0 0 1-14 0"
-                                            Fill="#FF2B2B2B"
+                                            Fill="{ThemeResource AppTextBrush}"
                                             Stretch="None" />
                                     </Viewbox>
                                     <TextBlock
@@ -131,7 +131,7 @@
                                             Width="22"
                                             Height="22"
                                             Data="M8.998 2.388a1.5 1.5 0 0 1 2.005 0l5.5 4.942A1.5 1.5 0 0 1 17 8.445V15.5a1.5 1.5 0 0 1-1.5 1.5H13a1.5 1.5 0 0 1-1.5-1.5V12a.5.5 0 0 0-.5-.5H9a.5.5 0 0 0-.5.5v3.5A1.5 1.5 0 0 1 7 17H4.5A1.5 1.5 0 0 1 3 15.5V8.445c0-.425.18-.83.498-1.115zM10.334 3.132a.5.5 0 0 0-.668 0l-5.5 4.942A.5.5 0 0 0 4 8.445V15.5a.5.5 0 0 0 .5.5H7a.5.5 0 0 0 .5-.5V12A1.5 1.5 0 0 1 9 10.5h2a1.5 1.5 0 0 1 1.5 1.5v3.5a.5.5 0 0 0 .5.5h2.5a.5.5 0 0 0 .5-.5V8.445a.5.5 0 0 0-.166-.371z"
-                                            Fill="#FF2B2B2B"
+                                            Fill="{ThemeResource AppTextBrush}"
                                             Stretch="None" />
                                     </Viewbox>
                                     <TextBlock
@@ -159,7 +159,7 @@
                                             Width="22"
                                             Height="22"
                                             Data="M1.911 7.383a8.5 8.5 0 0 1 1.78 -3.08a0.5 0.5 0 0 1 0.54 -0.135l1.918 0.686a1 1 0 0 0 1.32 -0.762l0.366 -2.006a0.5 0.5 0 0 1 0.388 -0.4a8.5 8.5 0 0 1 3.554 0a0.5 0.5 0 0 1 0.388 0.4l0.366 2.006a1 1 0 0 0 1.32 0.762l1.919 -0.686a0.5 0.5 0 0 1 0.54 0.136a8.5 8.5 0 0 1 1.78 3.079a0.5 0.5 0 0 1 -0.153 0.535l-1.555 1.32a1 1 0 0 0 0 1.524l1.555 1.32a0.5 0.5 0 0 1 0.152 0.535a8.5 8.5 0 0 1 -1.78 3.08a0.5 0.5 0 0 1 -0.54 0.135l-1.918 -0.686a1 1 0 0 0 -1.32 0.762l-0.366 2.007a0.5 0.5 0 0 1 -0.388 0.399a8.5 8.5 0 0 1 -3.554 0a0.5 0.5 0 0 1 -0.388 -0.4l-0.366 -2.006a1 1 0 0 0 -1.32 -0.762l-1.918 0.686a0.5 0.5 0 0 1 -0.54 -0.136a8.5 8.5 0 0 1 -1.78 -3.079a0.5 0.5 0 0 1 0.152 -0.535l1.555 -1.32a1 1 0 0 0 0 -1.524l-1.555 -1.32a0.5 0.5 0 0 1 -0.152 -0.535M2.971 7.377l1.294 1.098a2 2 0 0 1 0 3.05l-1.293 1.098c0.292 0.782 0.713 1.51 1.244 2.152l1.596 -0.57q0.155 -0.055 0.315 -0.085a2 2 0 0 1 2.326 1.609l0.304 1.669a7.6 7.6 0 0 0 2.486 0l0.304 -1.67a1.998 1.998 0 0 1 2.641 -1.524l1.596 0.571a7.5 7.5 0 0 0 1.245 -2.152l-1.294 -1.098a1.998 1.998 0 0 1 0 -3.05l1.294 -1.098a7.5 7.5 0 0 0 -1.245 -2.152l-1.596 0.57a2 2 0 0 1 -2.64 -1.524l-0.305 -1.669a7.6 7.6 0 0 0 -2.486 0l-0.304 1.669a2 2 0 0 1 -2.64 1.525l-1.597 -0.571a7.5 7.5 0 0 0 -1.244 2.152M7.502 10a2.5 2.5 0 1 1 5 0a2.5 2.5 0 0 1 -5 0M8.502 10a1.5 1.5 0 1 0 3 0a1.5 1.5 0 0 0 -3 0"
-                                            Fill="#FF2B2B2B"
+                                            Fill="{ThemeResource AppTextBrush}"
                                             Stretch="None" />
                                     </Viewbox>
                                     <TextBlock
@@ -173,7 +173,7 @@
                                         Grid.Column="3"
                                         VerticalAlignment="Center"
                                         FontSize="10"
-                                        Foreground="#99000000"
+                                        Foreground="{ThemeResource AppTertiaryTextBrush}"
                                         Glyph="&#xE70D;" />
                                 </Grid>
                             </Button>
@@ -194,7 +194,7 @@
                                                 Width="22"
                                                 Height="22"
                                                 Data="M1.911 7.383a8.5 8.5 0 0 1 1.78 -3.08a0.5 0.5 0 0 1 0.54 -0.135l1.918 0.686a1 1 0 0 0 1.32 -0.762l0.366 -2.006a0.5 0.5 0 0 1 0.388 -0.4a8.5 8.5 0 0 1 3.554 0a0.5 0.5 0 0 1 0.388 0.4l0.366 2.006a1 1 0 0 0 1.32 0.762l1.919 -0.686a0.5 0.5 0 0 1 0.54 0.136a8.5 8.5 0 0 1 1.78 3.079a0.5 0.5 0 0 1 -0.153 0.535l-1.555 1.32a1 1 0 0 0 0 1.524l1.555 1.32a0.5 0.5 0 0 1 0.152 0.535a8.5 8.5 0 0 1 -1.78 3.08a0.5 0.5 0 0 1 -0.54 0.135l-1.918 -0.686a1 1 0 0 0 -1.32 0.762l-0.366 2.007a0.5 0.5 0 0 1 -0.388 0.399a8.5 8.5 0 0 1 -3.554 0a0.5 0.5 0 0 1 -0.388 -0.4l-0.366 -2.006a1 1 0 0 0 -1.32 -0.762l-1.918 0.686a0.5 0.5 0 0 1 -0.54 -0.136a8.5 8.5 0 0 1 -1.78 -3.079a0.5 0.5 0 0 1 0.152 -0.535l1.555 -1.32a1 1 0 0 0 0 -1.524l-1.555 -1.32a0.5 0.5 0 0 1 -0.152 -0.535M2.971 7.377l1.294 1.098a2 2 0 0 1 0 3.05l-1.293 1.098c0.292 0.782 0.713 1.51 1.244 2.152l1.596 -0.57q0.155 -0.055 0.315 -0.085a2 2 0 0 1 2.326 1.609l0.304 1.669a7.6 7.6 0 0 0 2.486 0l0.304 -1.67a1.998 1.998 0 0 1 2.641 -1.524l1.596 0.571a7.5 7.5 0 0 0 1.245 -2.152l-1.294 -1.098a1.998 1.998 0 0 1 0 -3.05l1.294 -1.098a7.5 7.5 0 0 0 -1.245 -2.152l-1.596 0.57a2 2 0 0 1 -2.64 -1.524l-0.305 -1.669a7.6 7.6 0 0 0 -2.486 0l-0.304 1.669a2 2 0 0 1 -2.64 1.525l-1.597 -0.571a7.5 7.5 0 0 0 -1.244 2.152M7.502 10a2.5 2.5 0 1 1 5 0a2.5 2.5 0 0 1 -5 0M8.502 10a1.5 1.5 0 1 0 3 0a1.5 1.5 0 0 0 -3 0"
-                                                Fill="#FF2B2B2B"
+                                                Fill="{ThemeResource AppTextBrush}"
                                                 Stretch="None" />
                                         </Viewbox>
                                         <TextBlock
@@ -204,7 +204,11 @@
                                             Text="基本" />
                                     </Grid>
                                 </Button>
-                                <Button Style="{StaticResource NavSubItemStyle}" Tag="blank" Click="OnNavClick">
+                                <Button
+                                    x:Name="NavAppearance"
+                                    Style="{StaticResource NavSubItemStyle}"
+                                    Tag="appearance"
+                                    Click="OnNavClick">
                                     <Grid ColumnDefinitions="3,Auto,*">
                                         <Border
                                             Width="3"
@@ -216,7 +220,7 @@
                                                 Width="22"
                                                 Height="22"
                                                 Data="M10 2a8 8 0 0 1 3.388 15.249a3.77 3.77 0 0 1 -3.291 -0.059c-0.974 -0.503 -1.696 -1.467 -1.648 -2.731c0.017 -0.445 0.082 -0.867 0.143 -1.243c0.063 -0.387 0.118 -0.712 0.136 -1.015c0.018 -0.297 -0.004 -0.533 -0.078 -0.732c-0.07 -0.191 -0.2 -0.381 -0.45 -0.569c-0.313 -0.235 -0.58 -0.275 -0.845 -0.237c-0.3 0.043 -0.614 0.188 -1.014 0.387c-0.735 0.365 -1.776 0.942 -2.974 0.332c-1.102 -0.562 -1.424 -1.868 -1.22 -2.917A8 8 0 0 1 10 2M10 3a7 7 0 0 0 -6.871 5.655c-0.153 0.788 0.126 1.547 0.691 1.835c0.684 0.348 1.251 0.074 2.076 -0.336c0.38 -0.188 0.834 -0.412 1.318 -0.481c0.52 -0.075 1.054 0.028 1.586 0.427c0.39 0.292 0.645 0.634 0.788 1.021c0.14 0.379 0.162 0.768 0.14 1.14c-0.022 0.366 -0.09 0.753 -0.149 1.116a9 9 0 0 0 -0.13 1.12c-0.032 0.812 0.418 1.448 1.108 1.805a2.77 2.77 0 0 0 2.407 0.042A7.002 7.002 0 0 0 10 3M12.5 13a1 1 0 1 1 0 2a1 1 0 0 1 0 -2M14.5 10.5a1 1 0 1 1 0 2a1 1 0 0 1 0 -2M14.5 7.5a1 1 0 1 1 0 2a1 1 0 0 1 0 -2M12.5 5a1 1 0 1 1 0 2a1 1 0 0 1 0 -2M9.5 4.5a1 1 0 1 1 0 2a1 1 0 0 1 0 -2"
-                                                Fill="#FF2B2B2B"
+                                                Fill="{ThemeResource AppTextBrush}"
                                                 Stretch="None" />
                                         </Viewbox>
                                         <TextBlock
@@ -238,7 +242,7 @@
                                                 Width="22"
                                                 Height="22"
                                                 Data="M8.5 10a.5.5 0 0 0 0 1h3a.5.5 0 0 0 0-1zM2 4.75C2 3.784 2.784 3 3.75 3h12.5c.966 0 1.75.784 1.75 1.75v1.5c0 .698-.409 1.3-1 1.582V14a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V7.832A1.75 1.75 0 0 1 2 6.25zM3.75 4a.75.75 0 0 0-.75.75v1.5c0 .414.336.75.75.75h12.5a.75.75 0 0 0 .75-.75v-1.5a.75.75 0 0 0-.75-.75zM4 8v6a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V8z"
-                                                Fill="#FF2B2B2B"
+                                                Fill="{ThemeResource AppTextBrush}"
                                                 Stretch="None" />
                                         </Viewbox>
                                         <TextBlock
@@ -260,7 +264,7 @@
                                                 Width="22"
                                                 Height="22"
                                                 Data="M9.723 2.084a0.5 0.5 0 0 1 0.554 0a15.05 15.05 0 0 0 6.294 2.421A0.5 0.5 0 0 1 17 5v4.5c0 3.891 -2.307 6.73 -6.82 8.467a0.5 0.5 0 0 1 -0.36 0C5.308 16.23 3 13.39 3 9.5V5a0.5 0.5 0 0 1 0.43 -0.495a15.05 15.05 0 0 0 6.293 -2.421M9.599 3.346A16 16 0 0 1 4 5.428V9.5c0 3.392 1.968 5.863 6 7.463c4.032 -1.6 6 -4.071 6 -7.463V5.428a16 16 0 0 1 -5.6 -2.082l-0.4 -0.249z"
-                                                Fill="#FF2B2B2B"
+                                                Fill="{ThemeResource AppTextBrush}"
                                                 Stretch="None" />
                                         </Viewbox>
                                         <TextBlock
@@ -282,7 +286,7 @@
                                                 Width="22"
                                                 Height="22"
                                                 Data="M5 12.5a0.5 0.5 0 0 1 0.5 -0.5h9a0.5 0.5 0 0 1 0 1h-9a0.5 0.5 0 0 1 -0.5 -0.5M11.502 8.005a0.752 0.752 0 1 0 0 -1.505a0.752 0.752 0 0 0 0 1.505M15.255 7.252a0.752 0.752 0 1 1 -1.505 0a0.752 0.752 0 0 1 1.505 0M5.502 8.005a0.752 0.752 0 1 0 0 -1.505a0.752 0.752 0 0 0 0 1.505M7.75 9.752a0.752 0.752 0 1 1 -1.505 0a0.752 0.752 0 0 1 1.505 0M10.002 10.505a0.752 0.752 0 1 0 0 -1.505a0.752 0.752 0 0 0 0 1.505M13.759 9.752a0.752 0.752 0 1 1 -1.504 0a0.752 0.752 0 0 1 1.504 0M8.503 8.005a0.752 0.752 0 1 0 0 -1.505a0.752 0.752 0 0 0 0 1.505M2 5.5A1.5 1.5 0 0 1 3.5 4h13A1.5 1.5 0 0 1 18 5.5v8a1.5 1.5 0 0 1 -1.5 1.5h-13A1.5 1.5 0 0 1 2 13.5zM3.5 5a0.5 0.5 0 0 0 -0.5 0.5v8a0.5 0.5 0 0 0 0.5 0.5h13a0.5 0.5 0 0 0 0.5 -0.5v-8a0.5 0.5 0 0 0 -0.5 -0.5z"
-                                                Fill="#FF2B2B2B"
+                                                Fill="{ThemeResource AppTextBrush}"
                                                 Stretch="None" />
                                         </Viewbox>
                                         <TextBlock
@@ -310,7 +314,7 @@
                                             Width="22"
                                             Height="22"
                                             Data="M6 4.5V6H4a2 2 0 0 0 -2 2v7a2 2 0 0 0 2 2h12.003a2 2 0 0 0 2 -2V8a2 2 0 0 0 -2 -2H14V4.5A1.5 1.5 0 0 0 12.5 3h-5A1.5 1.5 0 0 0 6 4.5M7.5 4h5a0.5 0.5 0 0 1 0.5 0.5V6H7V4.5a0.5 0.5 0 0 1 0.5 -0.5M4 7h12.003a1 1 0 0 1 1 1v2H14v-0.5a0.5 0.5 0 0 0 -1 0v0.5H7v-0.5a0.5 0.5 0 0 0 -1 0v0.5H3V8a1 1 0 0 1 1 -1M13 11v0.5a0.5 0.5 0 0 0 1 0V11h3.003v4a1 1 0 0 1 -1 1H4a1 1 0 0 1 -1 -1v-4h3v0.5a0.5 0.5 0 0 0 1 0V11z"
-                                            Fill="#FF2B2B2B"
+                                            Fill="{ThemeResource AppTextBrush}"
                                             Stretch="None" />
                                     </Viewbox>
                                     <TextBlock
@@ -324,7 +328,7 @@
                                         Grid.Column="3"
                                         VerticalAlignment="Center"
                                         FontSize="10"
-                                        Foreground="#99000000"
+                                        Foreground="{ThemeResource AppTertiaryTextBrush}"
                                         Glyph="&#xE70D;" />
                                 </Grid>
                             </Button>
@@ -345,7 +349,7 @@
                                                 Width="22"
                                                 Height="22"
                                                 Data="M4.878.282l.348 1.071A2.2 2.2 0 0 0 6.624 2.75l1.072.348l.022.006a.423.423 0 0 1 0 .798l-1.072.348a2.2 2.2 0 0 0-1.399 1.397L4.9 6.717a.423.423 0 0 1-.798 0l-.348-1.07a2.2 2.2 0 0 0-1.399-1.403l-1.072-.348a.423.423 0 0 1 0-.798l1.072-.348a2.2 2.2 0 0 0 1.377-1.397L4.08.283a.423.423 0 0 1 .799 0M9.784 8.214l-.766-.248a1.58 1.58 0 0 1-.998-.999l-.25-.764a.302.302 0 0 0-.57 0l-.248.764a1.58 1.58 0 0 1-.984.999l-.765.248a.302.302 0 0 0 0 .57l.765.249a1.58 1.58 0 0 1 1 1.002l.248.764a.302.302 0 0 0 .57 0l.249-.764a1.58 1.58 0 0 1 .999-.999l.765-.248a.302.302 0 0 0 0-.57zM6.016 10.348l.207.637l-1.97 1.97a1.44 1.44 0 0 0-.386.705l-.707 3.182l3.159-.702c.282-.063.54-.205.744-.409l9.358-9.358a1.975 1.975 0 0 0-2.793-2.792L9.965 7.242l-.637-.21a.7.7 0 0 1-.23-.14a.4.4 0 0 1-.088-.11l3.91-3.91a2.975 2.975 0 0 1 4.207 4.207l-.67.67l.336.337a2 2 0 0 1 0 2.828l-.94.94a.5.5 0 0 1-.707-.708l.94-.939a1 1 0 0 0 0-1.414l-.336-.336l-7.98 7.98a2.5 2.5 0 0 1-1.235.678l-3.926.873a.5.5 0 0 1-.597-.596l.878-3.95c.1-.453.328-.867.655-1.195l2.212-2.211a.6.6 0 0 1 .258.311"
-                                                Fill="#FF2B2B2B"
+                                                Fill="{ThemeResource AppTextBrush}"
                                                 Stretch="None" />
                                         </Viewbox>
                                         <TextBlock
@@ -367,7 +371,7 @@
                                                 Width="22"
                                                 Height="22"
                                                 Data="M7.5 2a0.5 0.5 0 0 0 0 1h4a0.5 0.5 0 0 0 0 -1zM15.156 3.929a0.5 0.5 0 1 0 -0.707 0.707l1.414 1.414a0.5 0.5 0 1 0 0.707 -0.707zM9.5 6a0.5 0.5 0 0 0 -0.5 0.5v5a0.5 0.5 0 0 0 1 0v-5a0.5 0.5 0 0 0 -0.5 -0.5M9.5 18a7 7 0 1 0 0 -14a7 7 0 0 0 0 14M9.5 17a6 6 0 1 1 0 -12a6 6 0 0 1 0 12"
-                                                Fill="#FF2B2B2B"
+                                                Fill="{ThemeResource AppTextBrush}"
                                                 Stretch="None" />
                                         </Viewbox>
                                         <TextBlock
@@ -389,7 +393,7 @@
                                                 Width="22"
                                                 Height="22"
                                                 Data="M1 8a4 4 0 0 1 4-4h6a4 4 0 0 1 0 8H9.75a.75.75 0 0 1 0-1.5H11a2.5 2.5 0 0 0 0-5H5a2.5 2.5 0 0 0-.735 4.89c-.16.468-.25.966-.263 1.484A4 4 0 0 1 1 8M15.998 8.126a5 5 0 0 1-.263 1.484A2.501 2.501 0 0 1 15 14.5H9a2.5 2.5 0 0 1 0-5h1.25a.75.75 0 0 0 0-1.5H9a4 4 0 1 0 0 8h6a4 4 0 0 0 .998-7.874"
-                                                Fill="#FF2B2B2B"
+                                                Fill="{ThemeResource AppTextBrush}"
                                                 Stretch="None" />
                                         </Viewbox>
                                         <TextBlock
@@ -419,7 +423,7 @@
                                             Width="22"
                                             Height="22"
                                             Data="M17 15.555V10.5a0.6 0.6 0 0 0 -0.07 -0.273a0.37 0.37 0 0 0 -0.172 -0.149a1 1 0 0 0 -0.235 -0.062a2 2 0 0 0 -0.257 -0.016H16V5.117q0.047 -0.101 0.133 -0.242t0.164 -0.312q0.078 -0.173 0.14 -0.32A0.7 0.7 0 0 0 16.5 4a2 2 0 0 0 -0.07 -0.32a7 7 0 0 0 -0.157 -0.493l-0.18 -0.5a6 6 0 0 1 -0.116 -0.343a0.57 0.57 0 0 0 -0.188 -0.25A0.47 0.47 0 0 0 15.5 2h-2a0.55 0.55 0 0 0 -0.297 0.102a0.46 0.46 0 0 0 -0.18 0.242q-0.039 0.117 -0.125 0.351a14 14 0 0 0 -0.171 0.5q-0.087 0.265 -0.157 0.493q-0.07 0.226 -0.07 0.312q0 0.11 0.063 0.25q0.061 0.14 0.148 0.313a17 17 0 0 0 0.289 0.554V10h-0.266q-0.14 0 -0.265 0.016a0.7 0.7 0 0 0 -0.235 0.07a0.44 0.44 0 0 0 -0.171 0.148a0.5 0.5 0 0 0 -0.063 0.266v5.055q0 0.507 0.203 0.953t0.547 0.781A2.5 2.5 0 0 0 14.5 18q0.5 0 0.953 -0.195a2.7 2.7 0 0 0 0.797 -0.524q0.345 -0.327 0.547 -0.773a2.3 2.3 0 0 0 0.203 -0.953M15 10h-1V5a0.5 0.5 0 0 0 -0.055 -0.227l-0.406 -0.812l0.32 -0.961h1.282l0.32 0.96l-0.406 0.813A0.5 0.5 0 0 0 15 5zM13 12v-1h3v1zM16 13v2.5q0.008 0.297 -0.117 0.578a1.6 1.6 0 0 1 -0.328 0.485A1.5 1.5 0 0 1 14.5 17a1.3 1.3 0 0 1 -0.578 -0.117A1.5 1.5 0 0 1 13 15.5V13zM6 2.542a0.5 0.5 0 0 0 -0.688 -0.464A4.501 4.501 0 0 0 5 10.283V16a2 2 0 0 0 4 0v-5.716a4.5 4.5 0 0 0 -0.312 -8.205a0.5 0.5 0 0 0 -0.688 0.464V6a1 1 0 1 1 -2 0zM3.5 6.252c0 -1.19 0.593 -2.24 1.5 -2.874v2.62a2 2 0 1 0 4 0v-2.62a3.501 3.501 0 0 1 -0.688 6.119A0.5 0.5 0 0 0 8 9.96V16a1 1 0 1 1 -2 0V9.96a0.5 0.5 0 0 0 -0.312 -0.463A3.5 3.5 0 0 1 3.5 6.25"
-                                            Fill="#FF2B2B2B"
+                                            Fill="{ThemeResource AppTextBrush}"
                                             Stretch="None" />
                                     </Viewbox>
                                     <TextBlock
@@ -475,7 +479,7 @@
                     <StackPanel Padding="28,12,28,28" Spacing="16">
 
                         <Border
-                            Background="#FFEFEFF1"
+                            Background="{ThemeResource AppCardBackgroundBrush}"
                             CornerRadius="8">
                             <Image
                                 Source="Assets/Title.png"
@@ -490,8 +494,8 @@
 
                         <!-- 版本信息卡片 -->
                         <Border
-                            Background="#FFFFFFFF"
-                            BorderBrush="#14000000"
+                            Background="{ThemeResource AppCardBackgroundBrush}"
+                            BorderBrush="{ThemeResource AppCardBorderBrush}"
                             BorderThickness="1"
                             CornerRadius="8"
                             Padding="16,14,16,14">
@@ -512,15 +516,15 @@
                                     Grid.Column="2"
                                     VerticalAlignment="Center"
                                     FontSize="13"
-                                    Foreground="#66000000"
-                                    Text="0.0.7.0 (Codename PaintingTheWorld)" />
+                                    Foreground="{ThemeResource AppSecondaryTextBrush}"
+                                    Text="0.0.7.2 (Codename PaintingTheWorld)" />
                             </Grid>
                         </Border>
 
                         <!-- 版权卡片 -->
                         <Border
-                            Background="#FFFFFFFF"
-                            BorderBrush="#14000000"
+                            Background="{ThemeResource AppCardBackgroundBrush}"
+                            BorderBrush="{ThemeResource AppCardBorderBrush}"
                             BorderThickness="1"
                             CornerRadius="8"
                             Padding="16,14,16,14">
@@ -528,15 +532,15 @@
                                 <TextBlock FontSize="13" Text="Copyright (c) 2026 XingmoStudio" />
                                 <TextBlock
                                     FontSize="12"
-                                    Foreground="#66000000"
+                                    Foreground="{ThemeResource AppSecondaryTextBrush}"
                                     Text="本项目基于 GNU General Public License v3.0 获得许可。" />
                             </StackPanel>
                         </Border>
 
                         <!-- 常用链接卡片 -->
                         <Border
-                            Background="#FFFFFFFF"
-                            BorderBrush="#14000000"
+                            Background="{ThemeResource AppCardBackgroundBrush}"
+                            BorderBrush="{ThemeResource AppCardBorderBrush}"
                             BorderThickness="1"
                             CornerRadius="8"
                             Padding="16,14,16,14">
@@ -554,12 +558,12 @@
                                     <HyperlinkButton
                                         Content="项目主页"
                                         FontSize="13"
-                                        Foreground="#FF0078D4"
+                                        Foreground="{ThemeResource AppAccentBrush}"
                                         NavigateUri="https://github.com/XingmoStudio/ClassDock" />
                                     <HyperlinkButton
                                         Content="GitHub"
                                         FontSize="13"
-                                        Foreground="#FF0078D4"
+                                        Foreground="{ThemeResource AppAccentBrush}"
                                         NavigateUri="https://github.com/XingmoStudio" />
                                 </StackPanel>
                             </Grid>
@@ -567,8 +571,8 @@
 
                         <!-- 鸣谢 -->
                         <Border
-                            Background="#FFFFFFFF"
-                            BorderBrush="#14000000"
+                            Background="{ThemeResource AppCardBackgroundBrush}"
+                            BorderBrush="{ThemeResource AppCardBorderBrush}"
                             BorderThickness="1"
                             CornerRadius="8"
                             Padding="16,14,16,14">
@@ -581,11 +585,11 @@
                                 <TextBlock FontSize="13" TextWrapping="Wrap">
                                     <Run Text="项目灵感源自 " />
                                     <Hyperlink
-                                        Foreground="#FF0078D4"
+                                        Foreground="{ThemeResource AppAccentBrush}"
                                         NavigateUri="https://github.com/Alan-CRL/Inkeys">Alan-CRL/Inkeys</Hyperlink>
                                     <Run Text=" 与 " />
                                     <Hyperlink
-                                        Foreground="#FF0078D4"
+                                        Foreground="{ThemeResource AppAccentBrush}"
                                         NavigateUri="https://github.com/ClassIsland/ClassIsland">Classisland/Classisland</Hyperlink>
                                     <Run Text="。" />
                                 </TextBlock>
@@ -600,7 +604,7 @@
                                     Click="OnLibrariesClick">
                                     <TextBlock
                                         FontSize="13"
-                                        Foreground="#FF0078D4"
+                                        Foreground="{ThemeResource AppAccentBrush}"
                                         Text="第三方库" />
                                 </Button>
                             </StackPanel>
@@ -620,13 +624,13 @@
 
                         <TextBlock
                             FontSize="13"
-                            Foreground="#66000000"
+                            Foreground="{ThemeResource AppSecondaryTextBrush}"
                             TextWrapping="Wrap"
                             Text="选择应用在遇到未处理异常时的处理方式。" />
 
                         <Border
-                            Background="#FFFFFFFF"
-                            BorderBrush="#14000000"
+                            Background="{ThemeResource AppCardBackgroundBrush}"
+                            BorderBrush="{ThemeResource AppCardBorderBrush}"
                             BorderThickness="1"
                             CornerRadius="8"
                             Padding="16,14,16,16">
@@ -661,15 +665,15 @@
                                 <TextBlock
                                     Margin="0,10,0,0"
                                     FontSize="12"
-                                    Foreground="#66000000"
+                                    Foreground="{ThemeResource AppSecondaryTextBrush}"
                                     TextWrapping="Wrap"
                                     Text="静默重启会尝试重新启动 ClassDock；若启动阶段反复崩溃，会自动改为静默退出以避免重启循环。" />
                             </StackPanel>
                         </Border>
 
                         <Border
-                            Background="#FFFFFFFF"
-                            BorderBrush="#14000000"
+                            Background="{ThemeResource AppCardBackgroundBrush}"
+                            BorderBrush="{ThemeResource AppCardBorderBrush}"
                             BorderThickness="1"
                             CornerRadius="8"
                             Padding="16,14,16,16">
@@ -682,7 +686,7 @@
                                 <TextBlock
                                     Margin="0,2,0,0"
                                     FontSize="12"
-                                    Foreground="#66000000"
+                                    Foreground="{ThemeResource AppSecondaryTextBrush}"
                                     TextWrapping="Wrap"
                                     Text="在输入框中键入需要报错的内容，点击按钮后软件将抛出未处理异常，用于验证上方选择的崩溃处理方式是否生效。" />
 
@@ -696,6 +700,168 @@
                                     HorizontalAlignment="Left"
                                     Click="OnThrowTestErrorClick"
                                     Content="抛出错误" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border
+                            Background="{ThemeResource AppCardBackgroundBrush}"
+                            BorderBrush="{ThemeResource AppCardBorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="16,14,16,16">
+                            <StackPanel Spacing="4">
+                                <TextBlock
+                                    FontSize="14"
+                                    FontWeight="SemiBold"
+                                    Text="多开实例" />
+
+                                <Grid Margin="0,6,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock
+                                        VerticalAlignment="Center"
+                                        FontSize="13"
+                                        Text="允许同时运行多个 ClassDock 实例"
+                                        TextWrapping="Wrap" />
+                                    <ToggleSwitch
+                                        x:Name="AllowMultiInstanceSwitch"
+                                        Grid.Column="1"
+                                        Margin="0,0,-12,0"
+                                        VerticalAlignment="Center"
+                                        OffContent=""
+                                        OnContent=""
+                                        Toggled="OnAllowMultiInstanceToggled" />
+                                </Grid>
+
+                                <TextBlock
+                                    Margin="0,6,0,0"
+                                    FontSize="12"
+                                    Foreground="{ThemeResource AppSecondaryTextBrush}"
+                                    TextWrapping="Wrap"
+                                    Text="开启后再次启动 ClassDock 不再弹出“已经开启”的提示，多个实例可同时运行。" />
+                            </StackPanel>
+                        </Border>
+
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- 通用 · 外观与动画 -->
+                <ScrollViewer x:Name="AppearancePage" Visibility="Collapsed">
+                    <StackPanel Padding="28,12,28,28" Spacing="16">
+
+                        <TextBlock
+                            FontSize="22"
+                            FontWeight="SemiBold"
+                            Text="外观与动画" />
+
+                        <TextBlock
+                            FontSize="13"
+                            Foreground="{ThemeResource AppSecondaryTextBrush}"
+                            TextWrapping="Wrap"
+                            Text="调整应用的明暗主题与强调色；跟随系统时会自动响应 Windows 的深浅色切换。" />
+
+                        <Border
+                            Background="{ThemeResource AppCardBackgroundBrush}"
+                            BorderBrush="{ThemeResource AppCardBorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="16,14,16,16">
+                            <StackPanel Spacing="4">
+                                <TextBlock
+                                    FontSize="14"
+                                    FontWeight="SemiBold"
+                                    Text="主题" />
+
+                                <!-- 应用主题 -->
+                                <Grid Margin="0,10,0,0" ColumnDefinitions="*,Auto">
+                                    <TextBlock
+                                        VerticalAlignment="Center"
+                                        FontSize="13"
+                                        Text="应用主题" />
+                                    <ComboBox
+                                        x:Name="ThemeModeCombo"
+                                        Grid.Column="1"
+                                        MinWidth="150"
+                                        SelectionChanged="OnThemeModeChanged">
+                                        <ComboBoxItem Tag="System">
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <FontIcon FontSize="16" Glyph="&#xE72C;" />
+                                                <TextBlock Text="跟随系统" />
+                                            </StackPanel>
+                                        </ComboBoxItem>
+                                        <ComboBoxItem Tag="Light">
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <FontIcon FontSize="16" Glyph="&#xE706;" />
+                                                <TextBlock Text="明亮" />
+                                            </StackPanel>
+                                        </ComboBoxItem>
+                                        <ComboBoxItem Tag="Dark">
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <FontIcon FontSize="16" Glyph="&#xE708;" />
+                                                <TextBlock Text="黑暗" />
+                                            </StackPanel>
+                                        </ComboBoxItem>
+                                    </ComboBox>
+                                </Grid>
+
+                                <!-- 主题色来源 -->
+                                <Grid Margin="0,12,0,0" ColumnDefinitions="*,Auto">
+                                    <TextBlock
+                                        VerticalAlignment="Center"
+                                        FontSize="13"
+                                        Text="主题色来源" />
+                                    <ComboBox
+                                        x:Name="AccentSourceCombo"
+                                        Grid.Column="1"
+                                        MinWidth="150"
+                                        SelectionChanged="OnAccentSourceChanged">
+                                        <ComboBoxItem Content="系统" />
+                                        <ComboBoxItem Content="自定义" />
+                                    </ComboBox>
+                                </Grid>
+
+                                <!-- 自定义强调色：仅在来源为「自定义」时展开 -->
+                                <Grid
+                                    x:Name="CustomAccentRow"
+                                    Margin="0,12,0,0"
+                                    ColumnDefinitions="*,Auto"
+                                    Visibility="Collapsed">
+                                    <TextBlock
+                                        VerticalAlignment="Center"
+                                        FontSize="13"
+                                        Text="强调色" />
+                                    <Button
+                                        x:Name="AccentColorButton"
+                                        Grid.Column="1"
+                                        Padding="10,4,10,4"
+                                        CornerRadius="6"
+                                        Click="OnAccentColorClick">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <Border
+                                                x:Name="AccentSwatch"
+                                                Width="20"
+                                                Height="20"
+                                                CornerRadius="4"
+                                                BorderBrush="{ThemeResource AppCardBorderBrush}"
+                                                BorderThickness="1" />
+                                            <TextBlock
+                                                x:Name="AccentHexText"
+                                                VerticalAlignment="Center"
+                                                FontFamily="Consolas"
+                                                FontSize="12"
+                                                Text="#0078D4" />
+                                        </StackPanel>
+                                    </Button>
+                                </Grid>
+
+                                <TextBlock
+                                    Margin="0,12,0,0"
+                                    FontSize="12"
+                                    Foreground="{ThemeResource AppSecondaryTextBrush}"
+                                    TextWrapping="Wrap"
+                                    Text="主题与强调色的修改会立即应用并保存。系统强调色来自 Windows 个性化设置；自定义强调色仅在本应用内生效。" />
                             </StackPanel>
                         </Border>
 
@@ -716,8 +882,8 @@
                     x:Name="LibrariesPanel"
                     Width="320"
                     HorizontalAlignment="Right"
-                    Background="#FFF9F9F9"
-                    BorderBrush="#14000000"
+                    Background="{ThemeResource AppPageBackgroundBrush}"
+                    BorderBrush="{ThemeResource AppCardBorderBrush}"
                     BorderThickness="1,0,0,0"
                     Visibility="Collapsed">
                     <Border.RenderTransform>
@@ -747,7 +913,7 @@
                                 Click="OnLibrariesCloseClick">
                                 <FontIcon
                                     FontSize="14"
-                                    Foreground="#FF2B2B2B"
+                                    Foreground="{ThemeResource AppTextBrush}"
                                     Glyph="&#xE8BB;" />
                             </Button>
                         </Grid>
@@ -763,7 +929,7 @@
                                         Width="20"
                                         Margin="0,0,12,0"
                                         FontSize="14"
-                                        Foreground="#FF2B2B2B"
+                                        Foreground="{ThemeResource AppTextBrush}"
                                         Glyph="&#xE8B7;" />
                                     <TextBlock
                                         Grid.Column="1"
@@ -777,7 +943,7 @@
                                         Width="20"
                                         Margin="0,0,12,0"
                                         FontSize="14"
-                                        Foreground="#FF2B2B2B"
+                                        Foreground="{ThemeResource AppTextBrush}"
                                         Glyph="&#xE8B7;" />
                                     <TextBlock
                                         Grid.Column="1"
