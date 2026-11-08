@@ -1,0 +1,18 @@
+<Project>
+
+  <!--
+    发布变体的命名与发布参数集中在这里（不要在脚本/命令行里另写一份）。
+    约定（与直觉相反，注意别按名字猜）：
+      full            = 框架依赖，目标机必须安装 .NET 10 运行时
+      self-contained  = 自带 .NET 运行时，目标机无需安装
+    将来要交换命名或调整参数，只改下面两组的 Name / SelfContained。
+  -->
+  <PropertyGroup>
+    <VariantFrameworkDependentName>full</VariantFrameworkDependentName>
+    <VariantFrameworkDependentSelfContained>false</VariantFrameworkDependentSelfContained>
+
+    <VariantSelfContainedName>self-contained</VariantSelfContainedName>
+    <VariantSelfContainedSelfContained>true</VariantSelfContainedSelfContained>
+  </PropertyGroup>
+
+</Project>

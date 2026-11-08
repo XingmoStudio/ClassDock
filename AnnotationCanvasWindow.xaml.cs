@@ -80,25 +80,17 @@ public sealed partial class AnnotationCanvasWindow : Window
     private static readonly SolidColorBrush SwatchBorderBrush // 色块默认边框（半透明黑）
         = new(Color.FromArgb(0x1F, 0x00, 0x00, 0x00));
 
-    /// <summary>主题/个性化系统接口：设置后强调色固定为主题色；恢复为 null 则重新跟随画笔颜色。</summary>
-    public Color? ThemeAccent
-    {
-        get => _themeAccent;
-        set
-        {
-            _themeAccent = value;
-            RefreshAccent();
-        }
-    }
-    private Color? _themeAccent;
-
-    /// <summary>当前强调色：主题色优先，否则跟随画笔颜色。</summary>
-    private Color AccentColor => _themeAccent ?? _penColor;
+    /// <summary>批注窗的强调色固定跟随当前画笔颜色，不取全局应用强调色。
+    /// 非画笔工具（橡皮、图形等）不改变笔色，因此沿用最近一次笔色，不会突然跳回全局强调色或变成黑色。</summary>
+    private Color AccentColor => ReadableAccent(_penColor);
 
     // 工具按钮选中态的底色画刷（取自 XAML 资源，共享实例）
     private readonly SolidColorBrush _toolCheckedBrush;
     private readonly SolidColorBrush _toolCheckedHoverBrush;
     private readonly SolidColorBrush _toolCheckedPressedBrush;
+    // 工具按钮悬停/按下蒙层（取自 XAML 资源，随明暗切换改色）
+    private readonly SolidColorBrush _toolHoverBrush;
+    private readonly SolidColorBrush _toolPressedBrush;
 
     // 笔迹集合与撤销/重做栈
     private readonly List<InkStroke> _strokes = [];
@@ -121,6 +113,11 @@ public sealed partial class AnnotationCanvasWindow : Window
     private AnnotationTool _tool = AnnotationTool.Pen; // 当前选中工具
     private bool _erasing;              // 橡皮拖动中
     private uint _activePointerId;      // 活动指针 ID，过滤其它指针的事件
+
+    // 笔速橡皮（实验）：擦除半径随指针移动速度动态变化（有上下限）
+    private double _eraseRadiusEffective = 12;
+    private Point _eraseLastPoint;
+    private long _eraseLastTimestamp;
 
     // 画笔参数
     private Color _penColor = PenColor;
@@ -193,11 +190,23 @@ public sealed partial class AnnotationCanvasWindow : Window
         _toolCheckedBrush = (SolidColorBrush)Root.Resources["ToolCheckedBrush"];
         _toolCheckedHoverBrush = (SolidColorBrush)Root.Resources["ToolCheckedHoverBrush"];
         _toolCheckedPressedBrush = (SolidColorBrush)Root.Resources["ToolCheckedPressedBrush"];
-        // 工具选中态沿用应用统一强调色（窗口面板本身保持浅色，不参与明暗切换）
-        ThemeAccent = AppTheme.AccentColor;
+        _toolHoverBrush = (SolidColorBrush)Root.Resources["ToolHoverBrush"];
+        _toolPressedBrush = (SolidColorBrush)Root.Resources["ToolPressedBrush"];
+        // 记忆退出前的颜色：开启时沿用上次笔色，否则每次从默认红开始
+        if (AppSettings.RememberPenColor)
+            _penColor = FromArgbInt(AppSettings.LastPenColorArgb);
+        // 批注窗面板跟随应用明暗；强调色跟画笔颜色，不跟随全局应用强调色
+        AppTheme.Apply(Root);
+        ApplyAnnotTheme();
+        RefreshAccent();
         IconOf(PenButton).Fill = AccentBrush;
         AppTheme.Changed += OnAppThemeChanged;
-        Closed += (_, _) => AppTheme.Changed -= OnAppThemeChanged;
+        Closed += (_, _) =>
+        {
+            AppTheme.Changed -= OnAppThemeChanged;
+            AppTheme.Unapply(Root);
+            if (AppSettings.RememberPenColor) AppSettings.Save();
+        };
         UpdateThicknessVisuals();
         UpdateSwatchSelection();
         UpdateEraserSizeVisuals();
@@ -218,8 +227,8 @@ public sealed partial class AnnotationCanvasWindow : Window
 
     // ── 橡皮贴图：跟随指针移动，压在最上层，不参与命中测试；只在绘制区域显示 ──
 
-    /// <summary>橡皮贴图边长随擦除半径缩放，让擦除范围可见。</summary>
-    private double EraserVisualSize => Math.Max(24, _eraserRadius * 2 + 8);
+    /// <summary>橡皮贴图边长随擦除半径缩放，让擦除范围可见（笔速橡皮时跟随实时半径）。</summary>
+    private double EraserVisualSize => Math.Max(24, (_erasing ? _eraseRadiusEffective : _eraserRadius) * 2 + 8);
 
     /// <summary>橡皮工具下让贴图跟随指针（贴图中心对齐指针，避免偏移造成擦除手感偏差）。
     /// 指针移到笔设置栏或工具栏时收起，绘制区域之外不显示橡皮。</summary>
@@ -231,8 +240,11 @@ public sealed partial class AnnotationCanvasWindow : Window
             return;
         }
 
-        Canvas.SetLeft(EraserImage, position.X - EraserVisualSize / 2);
-        Canvas.SetTop(EraserImage, position.Y - EraserVisualSize / 2);
+        double size = EraserVisualSize;
+        EraserImage.Width = size;
+        EraserImage.Height = size;
+        Canvas.SetLeft(EraserImage, position.X - size / 2);
+        Canvas.SetTop(EraserImage, position.Y - size / 2);
         EraserImage.Visibility = Visibility.Visible;
     }
 
@@ -496,6 +508,10 @@ public sealed partial class AnnotationCanvasWindow : Window
     private double _lastPointerAngle; // 旋转手势中上一次指针相对尺心的角度
     private bool _rotateMoved;        // 旋转手势是否已真正移动（用于区分单击）
 
+    // ---- 量角器 / 三角板：可同时存在多只的独立量具 ----
+    private const int MeasureToolMaxPerKind = 3;
+    private readonly List<MeasureTool> _measureTools = [];
+
     // ---- 圆规 ----
     private const double CompassLegLength = 380;        // 铰链到尖端的长度（逻辑像素）
     private const double CompassPivotTop = 118;         // 铰链中心距容器顶部（上方容纳关闭按钮与捏柄）
@@ -587,7 +603,7 @@ public sealed partial class AnnotationCanvasWindow : Window
         // 放行冒泡到画布，由画布走贴边画直线
         if (_tool == AnnotationTool.Pen
             && e.GetCurrentPoint(Root).Properties.IsLeftButtonPressed
-            && TrySnapToRulerEdge(e.GetCurrentPoint(Root).Position) is not null)
+            && TrySnapToAnyEdge(e.GetCurrentPoint(Root).Position) is not null)
         {
             return;
         }
@@ -603,6 +619,12 @@ public sealed partial class AnnotationCanvasWindow : Window
 
     private void OnRulerPointerMoved(object sender, PointerRoutedEventArgs e)
     {
+        // 量角器 / 三角板的手势优先：同一次拖动只会落到一只量具上
+        if (DispatchMeasurePointerMoved(e))
+        {
+            e.Handled = true;
+            return;
+        }
         if (_rulerGesture == RulerGesture.None) return;
         // 直尺手势只在尺子存在时处理；圆规手势不依赖尺子
         if (_screenRuler is null && _rulerGesture is RulerGesture.Drag or RulerGesture.Rotate or RulerGesture.Resize) return;
@@ -683,6 +705,14 @@ public sealed partial class AnnotationCanvasWindow : Window
 
     private void OnRulerPointerReleased(object sender, PointerRoutedEventArgs e)
     {
+        if (_measureTools.FirstOrDefault(t => t.IsBusy) is { } measureTool)
+        {
+            e.Handled = true;
+            // 先结束手势再释放捕获：ReleasePointerCapture 会同步触发 CaptureLost
+            measureTool.EndGesture();
+            RulerLayer.ReleasePointerCapture(e.Pointer);
+            return;
+        }
         if (_rulerGesture == RulerGesture.None) return;
         e.Handled = true;
         var gesture = _rulerGesture;
@@ -705,6 +735,7 @@ public sealed partial class AnnotationCanvasWindow : Window
 
     private void OnRulerPointerCaptureLost(object sender, PointerRoutedEventArgs e)
     {
+        foreach (var measureTool in _measureTools) measureTool.EndGesture();
         if (_rulerGesture == RulerGesture.CompassDraw)
         {
             FinishStroke();
@@ -716,10 +747,18 @@ public sealed partial class AnnotationCanvasWindow : Window
     /// <summary>滚轮：向上滚逆时针、向下滚顺时针旋转。</summary>
     private void OnRulerPointerWheelChanged(object sender, PointerRoutedEventArgs e)
     {
-        if (_screenRuler is null) return;
-        e.Handled = true;
         int wheelDelta = e.GetCurrentPoint(RulerLayer).Properties.MouseWheelDelta;
         if (wheelDelta == 0) return;
+
+        // 滚轮落在哪只量具上就只转那一只
+        if (ToolFromSource(e.OriginalSource) is { } measureTool)
+        {
+            e.Handled = true;
+            measureTool.RotateByWheel(wheelDelta / 120.0 * RulerWheelAngleStep);
+            return;
+        }
+        if (_screenRuler is null) return;
+        e.Handled = true;
         _rulerAngle = NormalizeAngle(_rulerAngle - wheelDelta / 120.0 * RulerWheelAngleStep);
         ApplyRulerTransform();
     }
@@ -795,8 +834,8 @@ public sealed partial class AnnotationCanvasWindow : Window
     {
         double rulerWidth = _rulerCmCount * RulerCmPx + RulerEndMargin * 2;
 
-        var tickBrush = new SolidColorBrush(Color.FromArgb(0xFF, 0x4A, 0x4A, 0x4A));
-        var numberBrush = new SolidColorBrush(Color.FromArgb(0xFF, 0x6E, 0x6E, 0x6E));
+        var tickBrush = MeasureToolVisuals.TickStroke;
+        var numberBrush = MeasureToolVisuals.NumberForeground;
 
         var tickCanvas = new Canvas { Width = rulerWidth - 2, Height = RulerTickBandHeight };
         for (int mm = 0; mm <= _rulerCmCount * 10; mm++)
@@ -825,14 +864,14 @@ public sealed partial class AnnotationCanvasWindow : Window
         var tickBand = new Border
         {
             Height = RulerTickBandHeight,
-            Background = new SolidColorBrush(Color.FromArgb(0xE8, 0xFF, 0xFF, 0xFF)),
-            BorderBrush = new SolidColorBrush(Color.FromArgb(0x14, 0x00, 0x00, 0x00)),
+            Background = MeasureToolVisuals.TickBandFill,
+            BorderBrush = MeasureToolVisuals.TickBandBorder,
             BorderThickness = new Thickness(0, 0, 0, 1),
             CornerRadius = new CornerRadius(5, 5, 0, 0),
             Child = tickCanvas
         };
 
-        var closeButton = MakeRulerButton(BuildRulerCloseIcon(), "关闭直尺", OnRulerClosePressed);
+        var closeButton = MeasureToolVisuals.MakeButton(MeasureToolVisuals.BuildCloseIcon(), "关闭直尺", OnRulerClosePressed);
         closeButton.HorizontalAlignment = HorizontalAlignment.Left;
         closeButton.VerticalAlignment = VerticalAlignment.Bottom;
         closeButton.Margin = new Thickness(12, 0, 0, 11);
@@ -845,9 +884,9 @@ public sealed partial class AnnotationCanvasWindow : Window
             VerticalAlignment = VerticalAlignment.Bottom,
             Margin = new Thickness(0, 0, 12, 11)
         };
-        actions.Children.Add(MakeRulerButton(BuildRulerGlyph("\uE8A3", 13), "缩放（100% / 125% / 150%）", OnRulerZoomPressed));
-        actions.Children.Add(MakeRulerButton(BuildRulerGlyph("\uE72C", 13), "按住拖动旋转，滚轮也可旋转", OnRulerRotatePressed));
-        actions.Children.Add(MakeRulerButton(BuildRulerExpandIcon(), "按住左右滑动调整长度", OnRulerResizePressed));
+        actions.Children.Add(MeasureToolVisuals.MakeButton(MeasureToolVisuals.BuildGlyph("\uE8A3", 13), "缩放（100% / 125% / 150%）", OnRulerZoomPressed));
+        actions.Children.Add(MeasureToolVisuals.MakeButton(MeasureToolVisuals.BuildGlyph("\uE72C", 13), "按住拖动旋转，滚轮也可旋转", OnRulerRotatePressed));
+        actions.Children.Add(MeasureToolVisuals.MakeButton(MeasureToolVisuals.BuildExpandIcon(), "按住左右滑动调整长度", OnRulerResizePressed));
 
         var body = new Grid();
         body.Children.Add(closeButton);
@@ -865,77 +904,14 @@ public sealed partial class AnnotationCanvasWindow : Window
             Width = rulerWidth,
             Height = RulerBaseHeight,
             CornerRadius = new CornerRadius(6),
-            Background = new SolidColorBrush(Color.FromArgb(0xB4, 0xF6, 0xF9, 0xF9)),
-            BorderBrush = new SolidColorBrush(Color.FromArgb(0x1A, 0x00, 0x00, 0x00)),
+            Background = MeasureToolVisuals.BodyFill,
+            BorderBrush = MeasureToolVisuals.BodyBorder,
             BorderThickness = new Thickness(1),
             Child = layout
         };
         // 尺身拦截指针：按下即开始拖动整把尺子，且不会在尺子上画出笔迹；按钮自身先处理并阻断冒泡
         ruler.PointerPressed += OnRulerBodyPressed;
         return ruler;
-    }
-
-    /// <summary>尺子上的圆形工具按钮：半透明白底、细描边，内容居中。</summary>
-    private static Border MakeRulerButton(FrameworkElement icon, string tooltip, PointerEventHandler onPressed)
-    {
-        icon.HorizontalAlignment = HorizontalAlignment.Center;
-        icon.VerticalAlignment = VerticalAlignment.Center;
-        var button = new Border
-        {
-            Width = 26,
-            Height = 26,
-            CornerRadius = new CornerRadius(13),
-            Background = new SolidColorBrush(Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF)),
-            BorderBrush = new SolidColorBrush(Color.FromArgb(0x24, 0x00, 0x00, 0x00)),
-            BorderThickness = new Thickness(1),
-            Child = icon
-        };
-        ToolTipService.SetToolTip(button, tooltip);
-        button.PointerPressed += onPressed;
-        return button;
-    }
-
-    /// <summary>Segoe MDL2 Assets 字形图标（细线条风格，与尺子按钮一致）。</summary>
-    private static TextBlock BuildRulerGlyph(string glyph, double size) => new()
-    {
-        Text = glyph,
-        FontFamily = new FontFamily("Segoe MDL2 Assets"),
-        FontSize = size,
-        Foreground = new SolidColorBrush(Color.FromArgb(0xFF, 0x4A, 0x4A, 0x4A))
-    };
-
-    /// <summary>关闭图标：细线叉号。</summary>
-    private static Viewbox BuildRulerCloseIcon()
-    {
-        var canvas = new Canvas { Width = 24, Height = 24 };
-        canvas.Children.Add(new Line
-        {
-            X1 = 6, Y1 = 6, X2 = 18, Y2 = 18,
-            Stroke = new SolidColorBrush(Color.FromArgb(0xFF, 0x4A, 0x4A, 0x4A)),
-            StrokeThickness = 2
-        });
-        canvas.Children.Add(new Line
-        {
-            X1 = 18, Y1 = 6, X2 = 6, Y2 = 18,
-            Stroke = new SolidColorBrush(Color.FromArgb(0xFF, 0x4A, 0x4A, 0x4A)),
-            StrokeThickness = 2
-        });
-        return new Viewbox { Width = 13, Height = 13, Child = canvas };
-    }
-
-    /// <summary>横向展开图标：双向水平箭头。</summary>
-    private static Viewbox BuildRulerExpandIcon()
-    {
-        var stroke = new SolidColorBrush(Color.FromArgb(0xFF, 0x4A, 0x4A, 0x4A));
-        var canvas = new Canvas { Width = 24, Height = 24 };
-        void Add(double x1, double y1, double x2, double y2) => canvas.Children.Add(
-            new Line { X1 = x1, Y1 = y1, X2 = x2, Y2 = y2, Stroke = stroke, StrokeThickness = 2.2 });
-        Add(3, 12, 21, 12);    // 杆身
-        Add(21, 12, 17, 8);    // 右箭头
-        Add(21, 12, 17, 16);
-        Add(3, 12, 7, 8);      // 左箭头
-        Add(3, 12, 7, 16);
-        return new Viewbox { Width = 17, Height = 17, Child = canvas };
     }
 
     // ---- 尺边吸附画直线 ----
@@ -970,6 +946,119 @@ public sealed partial class AnnotationCanvasWindow : Window
 
         proj = Math.Clamp(proj, 0, len);
         return new Point(a.X + dir.X * proj, a.Y + dir.Y * proj);
+    }
+
+    /// <summary>落笔点贴着任一量具的可吸附边：把该边几何写进共享字段，返回投影后的吸附起点。
+    /// 三角板三条边里取最近的一条，量角器只认底边；都不命中时退回直尺的刻度边。</summary>
+    private Point? TrySnapToAnyEdge(Point p)
+    {
+        for (int i = _measureTools.Count - 1; i >= 0; i--)
+        {
+            if (_measureTools[i].TrySnap(p, Root) is not { } snap) continue;
+            _snapEdgeStart = snap.Start;
+            _snapEdgeDir = snap.Dir;
+            _snapEdgeLen = snap.Length;
+            _snapOutward = snap.Outward;
+            return snap.Projected;
+        }
+        return TrySnapToRulerEdge(p);
+    }
+
+    // ---- 量角器 / 三角板 ----
+
+    /// <summary>面板上的量角器：每次点击新增一把，用板身上的关闭按钮收回。</summary>
+    private void OnProtractorOptionPressed(object sender, PointerRoutedEventArgs e)
+    {
+        e.Handled = true;
+        AddMeasureTool(new ProtractorTool(RulerLayer));
+    }
+
+    /// <summary>面板上的 45° 三角板：每次点击新增一块。</summary>
+    private void OnTriangle45OptionPressed(object sender, PointerRoutedEventArgs e)
+    {
+        e.Handled = true;
+        AddMeasureTool(new TriangleTool(RulerLayer, TriangleKind.FortyFive));
+    }
+
+    /// <summary>面板上的 30°-60° 三角板：每次点击新增一块。</summary>
+    private void OnTriangle3060OptionPressed(object sender, PointerRoutedEventArgs e)
+    {
+        e.Handled = true;
+        AddMeasureTool(new TriangleTool(RulerLayer, TriangleKind.ThirtySixty));
+    }
+
+    /// <summary>新增一只量具：同类最多三只，超出时先收回最早的一只；落点按同类数量错开。</summary>
+    private void AddMeasureTool(MeasureTool tool)
+    {
+        int sameKind = _measureTools.Count(t => t.Kind == tool.Kind);
+        if (sameKind >= MeasureToolMaxPerKind)
+        {
+            RemoveMeasureTool(_measureTools.First(t => t.Kind == tool.Kind));
+            sameKind = MeasureToolMaxPerKind - 1;
+        }
+
+        tool.CloseRequested += RemoveMeasureTool;
+        // 画笔工具下按在可吸附边附近时放行给画布，走既有的贴边画直线流程
+        tool.SnapPassThrough = p => _tool == AnnotationTool.Pen && TrySnapToAnyEdge(p) is not null;
+        _measureTools.Add(tool);
+        RulerLayer.Children.Add(tool.Root);
+        tool.PlaceAt(new Point(
+            Root.ActualWidth / 2 + sameKind * 32,
+            Root.ActualHeight / 2 + sameKind * 32));
+        tool.BringToFront();
+        UpdateMeasureOptionStates();
+    }
+
+    /// <summary>收回一只量具。</summary>
+    private void RemoveMeasureTool(MeasureTool tool)
+    {
+        tool.EndGesture();
+        RulerLayer.Children.Remove(tool.Root);
+        _measureTools.Remove(tool);
+        UpdateMeasureOptionStates();
+    }
+
+    /// <summary>面板项底色：该类量具只要还在场就保持高亮。</summary>
+    private void UpdateMeasureOptionStates()
+    {
+        ProtractorOption.Background = _measureTools.Any(t => t.Kind == MeasureKind.Protractor)
+            ? ShapeActiveBrush : TransparentBrush;
+        Triangle45Option.Background = _measureTools.Any(t => t.Kind == MeasureKind.Triangle45)
+            ? ShapeActiveBrush : TransparentBrush;
+        Triangle3060Option.Background = _measureTools.Any(t => t.Kind == MeasureKind.Triangle3060)
+            ? ShapeActiveBrush : TransparentBrush;
+    }
+
+    /// <summary>指针落在哪只量具上（滚轮旋转按此归属，避免一次滚轮转全部量具）。</summary>
+    private MeasureTool? ToolFromSource(object? source)
+    {
+        var element = source as DependencyObject;
+        while (element is not null)
+        {
+            if (element is FrameworkElement { Tag: MeasureTool tool }) return tool;
+            if (ReferenceEquals(element, RulerLayer)) return null;
+            element = VisualTreeHelper.GetParent(element);
+        }
+        return null;
+    }
+
+    /// <summary>量具手势的移动分发：射线拖动优先，其次拖动/旋转/调尺寸。返回是否已消费。</summary>
+    private bool DispatchMeasurePointerMoved(PointerRoutedEventArgs e)
+    {
+        if (_measureTools.Count == 0) return false;
+        var pt = e.GetCurrentPoint(RulerLayer).Position;
+
+        if (_measureTools.FirstOrDefault(t => t.RayDragging) is { } ray)
+        {
+            ray.DragRay(pt);
+            return true;
+        }
+        if (_measureTools.FirstOrDefault(t => t.Gesture != MeasureGesture.None) is { } tool)
+        {
+            tool.PointerMoved(pt, e.KeyModifiers.HasFlag(VirtualKeyModifiers.Shift));
+            return true;
+        }
+        return false;
     }
 
     /// <summary>新建贴边直线草稿：视觉样式跟随当前画笔（颜色/粗细/荧光笔半透明），松手时按图形草稿提交。</summary>
@@ -1268,13 +1357,13 @@ public sealed partial class AnnotationCanvasWindow : Window
         root.Children.Add(knob);
 
         // 关闭按钮
-        var close = MakeRulerButton(BuildRulerCloseIcon(), "收回圆规", OnCompassClosePressed);
+        var close = MeasureToolVisuals.MakeButton(MeasureToolVisuals.BuildCloseIcon(), "收回圆规", OnCompassClosePressed);
         Canvas.SetLeft(close, halfW - 13);
         Canvas.SetTop(close, 8);
         root.Children.Add(close);
 
         // 开口调整按钮（笔尖侧边）
-        var resize = MakeRulerButton(BuildRulerExpandIcon(), "按住左右滑动调整开口", OnCompassResizePressed);
+        var resize = MeasureToolVisuals.MakeButton(MeasureToolVisuals.BuildExpandIcon(), "按住左右滑动调整开口", OnCompassResizePressed);
         Canvas.SetLeft(resize, halfW + 0.58 * CompassLegLength * sin + 34);
         Canvas.SetTop(resize, CompassPivotTop + 0.58 * CompassLegLength * cos - 13);
         root.Children.Add(resize);
@@ -1481,6 +1570,7 @@ public sealed partial class AnnotationCanvasWindow : Window
             || !double.TryParse(tag, out double radius)) return;
 
         _eraserRadius = radius;
+        _eraseRadiusEffective = radius;
         UpdateEraserSizeVisuals();
     }
 
@@ -1550,12 +1640,13 @@ public sealed partial class AnnotationCanvasWindow : Window
     private void OnPenColorChanged(ColorPicker sender, ColorChangedEventArgs args)
     {
         _penColor = args.NewColor;
+        SavePenColor(_penColor);
         RefreshAccent();
         UpdateSwatchSelection();
         UpdateCompassInkColor();
     }
 
-    /// <summary>强调色（默认跟随画笔颜色）刷新所有共用画刷；画刷是共享实例，改 Color 即全局生效。</summary>
+    /// <summary>强调色（跟随当前画笔颜色）刷新所有共用画刷；画刷是共享实例，改 Color 即全局生效。</summary>
     private void RefreshAccent()
     {
         Color accent = AccentColor;
@@ -1566,11 +1657,80 @@ public sealed partial class AnnotationCanvasWindow : Window
         _toolCheckedPressedBrush.Color = WithAlpha(accent, 0x32);
     }
 
-    /// <summary>应用强调色变化：批注工具选中态同步到统一主题强调色。</summary>
-    private void OnAppThemeChanged(object? sender, EventArgs e) => ThemeAccent = AppTheme.AccentColor;
+    /// <summary>批注窗跟随应用明暗：面板底色/描边/文字由 ThemeResource 自动换档，
+    /// 这里只同步代码里直接改色值的共享画刷（图标默认色、色块边框、悬停/按下蒙层）。</summary>
+    private void ApplyAnnotTheme()
+    {
+        bool dark = AppTheme.IsDark;
+        NormalBrush.Color = dark
+            ? Color.FromArgb(0xFF, 0xFF, 0xFF, 0xFF)
+            : Color.FromArgb(0xFF, 0x2B, 0x2B, 0x2B);
+        SwatchBorderBrush.Color = dark
+            ? Color.FromArgb(0x26, 0xFF, 0xFF, 0xFF)
+            : Color.FromArgb(0x1F, 0x00, 0x00, 0x00);
+        _toolHoverBrush.Color = dark
+            ? Color.FromArgb(0x14, 0xFF, 0xFF, 0xFF)
+            : Color.FromArgb(0x0C, 0x00, 0x00, 0x00);
+        _toolPressedBrush.Color = dark
+            ? Color.FromArgb(0x24, 0xFF, 0xFF, 0xFF)
+            : Color.FromArgb(0x16, 0x00, 0x00, 0x00);
+    }
+
+    /// <summary>应用主题变化：批注窗面板同步明暗；笔色强调色按新主题的底色重算对比度。</summary>
+    private void OnAppThemeChanged(object? sender, EventArgs e)
+    {
+        ApplyAnnotTheme();
+        RefreshAccent();
+    }
 
     /// <summary>保留透明度、替换 RGB，用于由强调色派生各档选中态底色。</summary>
     private static Color WithAlpha(Color color, byte alpha) => Color.FromArgb(alpha, color.R, color.G, color.B);
+
+    /// <summary>批注窗面板底色（与 App.xaml 主题字典的卡片色一致），用于计算可读强调色。</summary>
+    private static Color PanelBackground => AppTheme.IsDark
+        ? Color.FromArgb(0xFF, 0x2B, 0x2B, 0x2B)
+        : Color.FromArgb(0xFF, 0xFF, 0xFF, 0xFF);
+
+    /// <summary>把画笔颜色转成面板上的可读强调色：浅黄、荧光绿这类低对比色
+    /// 按当前主题向黑（浅色主题）或白（深色主题）混合，直到与面板底色对比度达标。
+    /// 只影响 UI 强调色，不改画笔本身，笔迹仍用原始颜色。</summary>
+    private static Color ReadableAccent(Color penColor)
+    {
+        Color background = PanelBackground;
+        Color toward = AppTheme.IsDark
+            ? Color.FromArgb(0xFF, 0xFF, 0xFF, 0xFF)
+            : Color.FromArgb(0xFF, 0x00, 0x00, 0x00);
+        Color result = penColor;
+        for (int i = 0; i < 12 && ContrastRatio(result, background) < 3.0; i++)
+            result = Blend(result, toward, 0.18);
+        return result;
+    }
+
+    /// <summary>WCAG 相对亮度（0~1）。</summary>
+    private static double RelativeLuminance(Color color)
+    {
+        static double Channel(byte value)
+        {
+            double s = value / 255.0;
+            return s <= 0.03928 ? s / 12.92 : Math.Pow((s + 0.055) / 1.055, 2.4);
+        }
+        return 0.2126 * Channel(color.R) + 0.7152 * Channel(color.G) + 0.0722 * Channel(color.B);
+    }
+
+    /// <summary>两色对比度（1~21，WCAG 公式）。</summary>
+    private static double ContrastRatio(Color a, Color b)
+    {
+        double la = RelativeLuminance(a);
+        double lb = RelativeLuminance(b);
+        return (Math.Max(la, lb) + 0.05) / (Math.Min(la, lb) + 0.05);
+    }
+
+    /// <summary>按比例把 from 混向 to，结果保持不透明。</summary>
+    private static Color Blend(Color from, Color to, double amount)
+    {
+        static byte Mix(byte a, byte b, double t) => (byte)Math.Round(a + (b - a) * t);
+        return Color.FromArgb(0xFF, Mix(from.R, to.R, amount), Mix(from.G, to.G, amount), Mix(from.B, to.B, amount));
+    }
 
     /// <summary>粗细滑块值变更：同步画笔粗细并刷新演示曲线。</summary>
     private void OnThicknessChanged(object sender, RangeBaseValueChangedEventArgs e)
@@ -1694,6 +1854,7 @@ public sealed partial class AnnotationCanvasWindow : Window
         if (sender is Border { Tag: string hex })
         {
             _penColor = ParseHex(hex);
+            SavePenColor(_penColor);
             if (_colorPicker is not null) _colorPicker.Color = _penColor;
             RefreshAccent();
             UpdateSwatchSelection();
@@ -1710,6 +1871,23 @@ public sealed partial class AnnotationCanvasWindow : Window
         uint value = Convert.ToUInt32(digits, 16);
         return Color.FromArgb(
             (byte)(value >> 24), (byte)(value >> 16), (byte)(value >> 8), (byte)value);
+    }
+
+    /// <summary>ARGB 整数转 Color（用于读取设置里保存的笔色）。</summary>
+    private static Color FromArgbInt(int argb)
+    {
+        uint value = unchecked((uint)argb);
+        return Color.FromArgb(
+            (byte)(value >> 24), (byte)(value >> 16), (byte)(value >> 8), (byte)value);
+    }
+
+    /// <summary>「记忆退出前的颜色」开启时，把当前笔色记到设置里；实际落盘在窗口关闭时统一执行。</summary>
+    private static void SavePenColor(Color color)
+    {
+        if (!AppSettings.RememberPenColor) return;
+        int argb = unchecked((int)((uint)0xFF000000
+            | ((uint)color.R << 16) | ((uint)color.G << 8) | color.B));
+        AppSettings.LastPenColorArgb = argb;
     }
 
     /// <summary>色块选中态：与当前画笔颜色相同的格子显示强调边框。</summary>
@@ -1753,6 +1931,11 @@ public sealed partial class AnnotationCanvasWindow : Window
         var position = point.Position;
         UpdateEraserVisual(position, e.OriginalSource);
 
+        // 桌面交互模式：手指触控不落笔（触控笔与鼠标不受影响）
+        if (AppSettings.InteractionMode == AnnotationInteractionMode.Desktop
+            && e.Pointer.PointerDeviceType == Microsoft.UI.Input.PointerDeviceType.Touch)
+            return;
+
         if (point.Properties.IsRightButtonPressed)
         {
             ShowActionMenu(position);
@@ -1770,14 +1953,17 @@ public sealed partial class AnnotationCanvasWindow : Window
         {
             case AnnotationTool.Eraser:
                 _erasing = true;
+                _eraseRadiusEffective = _eraserRadius;
+                _eraseLastPoint = position;
+                _eraseLastTimestamp = Stopwatch.GetTimestamp();
                 _eraseRemoved.Clear();
                 _eraseFragments.Clear();
                 EraseAt(position);
                 break;
 
             case AnnotationTool.Pen:
-                // 落笔在尺子刻度边附近：贴边画直线；否则正常自由笔迹
-                if (TrySnapToRulerEdge(position) is { } snapStart)
+                // 落笔在直尺刻度边或量具可吸附边附近：贴边画直线；否则正常自由笔迹
+                if (TrySnapToAnyEdge(position) is { } snapStart)
                 {
                     _rulerSnapActive = true;
                     _snapStart = snapStart;
@@ -2324,7 +2510,32 @@ public sealed partial class AnnotationCanvasWindow : Window
 
         if (_erasing)
         {
-            if (point.Properties.IsLeftButtonPressed) EraseAt(p);
+            if (!point.Properties.IsLeftButtonPressed) return;
+
+            // 笔速橡皮（实验）：移动越快半径越大，慢速缩小；平滑过渡并限制在 0.6~2.2 倍之间
+            if (AppSettings.SpeedEraser)
+            {
+                long now = Stopwatch.GetTimestamp();
+                double dtMs = (now - _eraseLastTimestamp) * 1000.0 / Stopwatch.Frequency;
+                double segment = Distance(p, _eraseLastPoint);
+                _eraseLastPoint = p;
+                _eraseLastTimestamp = now;
+                if (dtMs > 0.5)
+                {
+                    double speed = segment / dtMs;   // px/ms
+                    double target = Math.Clamp(
+                        _eraserRadius * (0.65 + speed * 0.5),
+                        _eraserRadius * 0.6, _eraserRadius * 2.2);
+                    _eraseRadiusEffective += (target - _eraseRadiusEffective) * 0.35;
+                }
+            }
+            else
+            {
+                _eraseRadiusEffective = _eraserRadius;
+            }
+
+            UpdateEraserVisual(p, e.OriginalSource);
+            EraseAt(p);
             return;
         }
 
@@ -2342,10 +2553,19 @@ public sealed partial class AnnotationCanvasWindow : Window
 
         if (_current is null) return;
         var last = _current.Points[^1];
-        // 过滤抖动：采样点间距过小会让法线方向乱跳，轮廓更容易自交
-        if (Math.Abs(p.X - last.X) < 1.2 && Math.Abs(p.Y - last.Y) < 1.2) return;
+        // 过滤抖动：采样点间距过小会让法线方向乱跳，轮廓更容易自交；间距档位由设置决定
+        double minDistance = MinSampleDistance;
+        if (Math.Abs(p.X - last.X) < minDistance && Math.Abs(p.Y - last.Y) < minDistance) return;
         AppendStrokePoint(_current, p);
     }
+
+    /// <summary>采样点最小间距：高频更密（笔迹更细腻），低频更疏（更省性能）。</summary>
+    private static double MinSampleDistance => AppSettings.SampleRate switch
+    {
+        AnnotationSampleRate.High => 0.6,
+        AnnotationSampleRate.Low => 2.4,
+        _ => 1.2
+    };
 
     /// <summary>指针离开画布：隐藏橡皮贴图。</summary>
     private void OnPointerExited(object sender, PointerRoutedEventArgs e) => HideEraserVisual();
@@ -2363,6 +2583,7 @@ public sealed partial class AnnotationCanvasWindow : Window
     /// <summary>指针捕获丢失：重置活动指针并结束绘制。</summary>
     private void OnPointerCaptureLost(object sender, PointerRoutedEventArgs e)
     {
+        if (e.Pointer.PointerId != _activePointerId) return;
         _activePointerId = 0;
         FinishStroke();
     }
@@ -2399,26 +2620,36 @@ public sealed partial class AnnotationCanvasWindow : Window
 
         if (_current is not null)
         {
-            if (_current.Points.Count == 1)
-            {
-                var p = _current.Points[0];
-                var p2 = new Point(p.X + 0.5, p.Y);
-                _current.Points.Add(p2);
-                _current.HalfWidths.Add(_current.HalfWidths.Count > 0 ? _current.HalfWidths[^1] : 1);
-                if (_current.Visual is Polyline line) line.Points.Add(p2);
-            }
-
-            if (_current.Kind == PenKind.Soft)
-            {
-                // 书写期间只画平滑的等宽变化；收笔后再整体平滑并生成笔锋
-                SmoothHalfWidths(_current);
-                TaperSoftInkEnd(_current);
-                RebuildSoftInk(_current);
-            }
+            FinishPenStroke(_current);
         }
         _current = null;
         CommitErase();
         _erasing = false;
+    }
+
+    /// <summary>结束一条笔迹：点一下不拖则补一个极短线段，让它显示为圆点。
+    /// 软笔按「抬笔时笔锋修正」设置决定是否做收笔平滑与出锋。</summary>
+    private static void FinishPenStroke(InkStroke stroke)
+    {
+        if (stroke.Points.Count == 1)
+        {
+            var p = stroke.Points[0];
+            var p2 = new Point(p.X + 0.5, p.Y);
+            stroke.Points.Add(p2);
+            stroke.HalfWidths.Add(stroke.HalfWidths.Count > 0 ? stroke.HalfWidths[^1] : 1);
+            if (stroke.Visual is Polyline line) line.Points.Add(p2);
+        }
+
+        if (stroke.Kind == PenKind.Soft)
+        {
+            // 书写期间只画平滑的等宽变化；收笔后再整体平滑并生成笔锋
+            if (AppSettings.PenTaperCorrection)
+            {
+                SmoothHalfWidths(stroke);
+                TaperSoftInkEnd(stroke);
+            }
+            RebuildSoftInk(stroke);
+        }
     }
 
     // ── 橡皮：面积擦 —— 擦除范围内的采样点被剔除，笔迹剩余部分拆成多段保留 ──
@@ -2469,7 +2700,7 @@ public sealed partial class AnnotationCanvasWindow : Window
         for (int i = 0; i < count; i++)
         {
             double half = HalfWidthAt(stroke, i);
-            if (Distance(eraser, points[i]) <= _eraserRadius + half)
+            if (Distance(eraser, points[i]) <= _eraseRadiusEffective + half)
             {
                 erased[i] = true;
                 hit = true;
@@ -2712,9 +2943,11 @@ public sealed partial class AnnotationCanvasWindow : Window
 
     // ── 进出场：整体淡入 + 工具栏自上而下渐现 ──
 
-    /// <summary>进场动画：整体淡入 + 工具栏从上方向下滑入。</summary>
+    /// <summary>进场动画：整体淡入 + 工具栏从上方向下滑入。「动画级别=无」时直接呈现。</summary>
     private void PlayEnter()
     {
+        if (AppSettings.AnimationLevel == AnimationLevel.None) return;
+
         var visual = ElementCompositionPreview.GetElementVisual(Root);
         var comp = visual.Compositor;
 
@@ -2756,9 +2989,15 @@ public sealed partial class AnnotationCanvasWindow : Window
         return animation;
     }
 
-    /// <summary>淡出后执行 onDone（由调用方关闭窗口）。</summary>
+    /// <summary>淡出后执行 onDone（由调用方关闭窗口）。「动画级别=无」时立即回调。</summary>
     public void PlayExit(Action onDone)
     {
+        if (AppSettings.AnimationLevel == AnimationLevel.None)
+        {
+            onDone();
+            return;
+        }
+
         var visual = ElementCompositionPreview.GetElementVisual(Root);
         var comp = visual.Compositor;
 

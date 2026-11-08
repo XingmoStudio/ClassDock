@@ -2,6 +2,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
+using Microsoft.Win32;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -15,7 +16,7 @@ using Windows.UI.ViewManagement;
 
 namespace ClassDock;
 
-/// <summary>崩溃发生时的处理方式（设置 → 调试）。</summary>
+/// <summary>崩溃发生时的处理方式（设置 → 通用 → 基本）。</summary>
 public enum CrashBehavior
 {
     SilentExit,
@@ -25,12 +26,35 @@ public enum CrashBehavior
     Ignore
 }
 
-/// <summary>应用级设置的持久化，存于 %LOCALAPPDATA%\ClassDock\settings.json。</summary>
+/// <summary>界面动画级别。</summary>
+public enum AnimationLevel
+{
+    Standard,
+    None
+}
+
+/// <summary>批注交互模式。</summary>
+public enum AnnotationInteractionMode
+{
+    /// <summary>桌面交互模式：鼠标/触控笔绘制，手指触控不落笔，避免误触。</summary>
+    Desktop,
+    /// <summary>屏幕触控模式：手指触控也可以直接绘制（适合触摸大屏）。</summary>
+    Touch
+}
+
+/// <summary>批注采样率：决定笔迹采样点之间的最小间距。</summary>
+public enum AnnotationSampleRate
+{
+    High,
+    Default,
+    Low
+}
+
+/// <summary>应用级设置的持久化，存于程序目录下的 data\Config.json（不可写时回退到用户数据目录）。</summary>
 internal static class AppSettings
 {
-    private static readonly string Dir = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ClassDock");
-    private static readonly string FilePath = Path.Combine(Dir, "settings.json");
+    /// <summary>配置文件路径（供备份/重置功能使用）。</summary>
+    public static string SettingsFilePath => AppPaths.ConfigFile;
 
     /// <summary>默认同调试版本旧的弹窗行为。</summary>
     public static CrashBehavior CrashBehavior { get; set; } = CrashBehavior.ShowError;
@@ -47,14 +71,91 @@ internal static class AppSettings
     /// <summary>自定义强调色（ARGB 整数）；仅在强调色来源为自定义时生效。</summary>
     public static int CustomAccentArgb { get; set; } = unchecked((int)0xFF0078D4);
 
-    static AppSettings() => Load();
+    /// <summary>界面动画级别。</summary>
+    public static AnimationLevel AnimationLevel { get; set; } = AnimationLevel.Standard;
+
+    /// <summary>批注交互模式。</summary>
+    public static AnnotationInteractionMode InteractionMode { get; set; } = AnnotationInteractionMode.Desktop;
+
+    /// <summary>是否记住退出前的画笔颜色。</summary>
+    public static bool RememberPenColor { get; set; } = true;
+
+    /// <summary>上次使用的画笔颜色（ARGB 整数）。</summary>
+    public static int LastPenColorArgb { get; set; } = unchecked((int)0xFFE81123);
+
+    /// <summary>批注采样率。</summary>
+    public static AnnotationSampleRate SampleRate { get; set; } = AnnotationSampleRate.Default;
+
+    /// <summary>多指绘图（实验）：多根手指可同时各画一条笔迹。</summary>
+    public static bool MultiTouchDrawing { get; set; }
+
+    /// <summary>抬笔时笔锋修正：软笔收笔时做平滑与出锋。</summary>
+    public static bool PenTaperCorrection { get; set; } = true;
+
+    /// <summary>笔速橡皮（实验）：移动越快橡皮半径越大（有上下限）。</summary>
+    public static bool SpeedEraser { get; set; }
+
+    /// <summary>测试与调试页是否已解锁（版本号连点 7 次并确认风险后置为 true）。</summary>
+    public static bool DebugUnlocked { get; set; }
+
+    /// <summary>打开设置窗口时是否默认落在主页。</summary>
+    public static bool OpenHomeByDefault { get; set; }
+
+    private const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
+    private const string RunValueName = "ClassDock";
+
+    /// <summary>开机自启状态以注册表为准（不写入 Config.json）。</summary>
+    public static bool IsAutoStartEnabled()
+    {
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(RunKeyPath);
+            return key?.GetValue(RunValueName) is string value && value.Length > 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>写入/移除 HKCU Run 项实现开机自启。</summary>
+    public static void SetAutoStart(bool enabled)
+    {
+        try
+        {
+            using var key = Registry.CurrentUser.CreateSubKey(RunKeyPath);
+            if (key is null) return;
+            if (enabled)
+            {
+                // 优先指向根目录启动器：升级到新的 App-{版本号} 后自启路径依然有效
+                var exe = File.Exists(AppPaths.LauncherPath) ? AppPaths.LauncherPath : Environment.ProcessPath;
+                if (exe is null) return;
+                key.SetValue(RunValueName, $"\"{exe}\"");
+            }
+            else
+            {
+                key.DeleteValue(RunValueName, throwOnMissingValue: false);
+            }
+        }
+        catch
+        {
+            // 无权限或被策略拦截时静默失败，开关状态以注册表实际值为准
+        }
+    }
+
+    static AppSettings()
+    {
+        // 先解析目录并完成旧配置迁移，再读取
+        AppPaths.Initialize();
+        Load();
+    }
 
     private static void Load()
     {
         try
         {
-            if (!File.Exists(FilePath)) return;
-            var model = JsonSerializer.Deserialize<Model>(File.ReadAllText(FilePath));
+            if (!File.Exists(AppPaths.ConfigFile)) return;
+            var model = JsonSerializer.Deserialize<Model>(File.ReadAllText(AppPaths.ConfigFile));
             if (model is not null)
             {
                 CrashBehavior = model.CrashBehavior;
@@ -63,6 +164,16 @@ internal static class AppSettings
                 AccentSource = Enum.IsDefined(model.AccentSource) ? model.AccentSource : AccentSourceMode.System;
                 // 强制不透明，避免历史/手改数据带来透明强调色
                 CustomAccentArgb = unchecked(model.CustomAccentArgb | (int)0xFF000000);
+                AnimationLevel = Enum.IsDefined(model.AnimationLevel) ? model.AnimationLevel : AnimationLevel.Standard;
+                InteractionMode = Enum.IsDefined(model.InteractionMode) ? model.InteractionMode : AnnotationInteractionMode.Desktop;
+                RememberPenColor = model.RememberPenColor;
+                LastPenColorArgb = unchecked(model.LastPenColorArgb | (int)0xFF000000);
+                SampleRate = Enum.IsDefined(model.SampleRate) ? model.SampleRate : AnnotationSampleRate.Default;
+                MultiTouchDrawing = model.MultiTouchDrawing;
+                PenTaperCorrection = model.PenTaperCorrection;
+                SpeedEraser = model.SpeedEraser;
+                DebugUnlocked = model.DebugUnlocked;
+                OpenHomeByDefault = model.OpenHomeByDefault;
             }
         }
         catch
@@ -75,16 +186,26 @@ internal static class AppSettings
     {
         try
         {
-            Directory.CreateDirectory(Dir);
+            Directory.CreateDirectory(Path.GetDirectoryName(AppPaths.ConfigFile)!);
             File.WriteAllText(
-                FilePath,
+                AppPaths.ConfigFile,
                 JsonSerializer.Serialize(new Model
                 {
                     CrashBehavior = CrashBehavior,
                     AllowMultiInstance = AllowMultiInstance,
                     ThemeMode = ThemeMode,
                     AccentSource = AccentSource,
-                    CustomAccentArgb = CustomAccentArgb
+                    CustomAccentArgb = CustomAccentArgb,
+                    AnimationLevel = AnimationLevel,
+                    InteractionMode = InteractionMode,
+                    RememberPenColor = RememberPenColor,
+                    LastPenColorArgb = LastPenColorArgb,
+                    SampleRate = SampleRate,
+                    MultiTouchDrawing = MultiTouchDrawing,
+                    PenTaperCorrection = PenTaperCorrection,
+                    SpeedEraser = SpeedEraser,
+                    DebugUnlocked = DebugUnlocked,
+                    OpenHomeByDefault = OpenHomeByDefault
                 }));
         }
         catch
@@ -100,6 +221,16 @@ internal static class AppSettings
         public AppThemeMode ThemeMode { get; set; } = AppThemeMode.System;
         public AccentSourceMode AccentSource { get; set; } = AccentSourceMode.System;
         public int CustomAccentArgb { get; set; } = unchecked((int)0xFF0078D4);
+        public AnimationLevel AnimationLevel { get; set; } = AnimationLevel.Standard;
+        public AnnotationInteractionMode InteractionMode { get; set; } = AnnotationInteractionMode.Desktop;
+        public bool RememberPenColor { get; set; } = true;
+        public int LastPenColorArgb { get; set; } = unchecked((int)0xFFE81123);
+        public AnnotationSampleRate SampleRate { get; set; } = AnnotationSampleRate.Default;
+        public bool MultiTouchDrawing { get; set; }
+        public bool PenTaperCorrection { get; set; } = true;
+        public bool SpeedEraser { get; set; }
+        public bool DebugUnlocked { get; set; }
+        public bool OpenHomeByDefault { get; set; }
     }
 }
 
@@ -154,11 +285,9 @@ public partial class App : Application
     {
         try
         {
-            var dir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ClassDock");
-            Directory.CreateDirectory(dir);
+            Directory.CreateDirectory(AppPaths.LogsDir);
             File.AppendAllText(
-                Path.Combine(dir, "error.log"),
+                Path.Combine(AppPaths.LogsDir, "error.log"),
                 $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {ex}\r\n\r\n");
         }
         catch
@@ -529,6 +658,9 @@ public partial class App : Application
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
+        // 目录解析最靠前：建 data 目录、完成旧配置迁移，后续读设置/写日志都依赖它
+        AppPaths.Initialize();
+
         // 主题服务先于任何窗口初始化，保证首个窗口即拿到正确的明暗与强调色
         AppTheme.Initialize();
 

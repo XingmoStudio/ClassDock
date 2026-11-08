@@ -3,13 +3,30 @@ name: ClassDock Nightly
 on:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: '发布通道（仅 DP / Pre-Release 由 CI 产出）'
+        type: choice
+        required: false
+        default: dp
+        options:
+          - dp
+          - pre-release
 
 permissions:
   contents: write
 
+env:
+  CONFIGURATION: Release
+  PLATFORM: x64
+
 jobs:
   nightly:
     runs-on: windows-latest
+    env:
+      # 手动触发时带上通道输入；push 触发时为空，改从提交信息里解析。
+      CHANNEL_INPUT: ${{ inputs.channel || '' }}
 
     steps:
       - name: Checkout
@@ -20,25 +37,213 @@ jobs:
         with:
           dotnet-version: "10.0.x"
 
-      - name: Build Debug
-        run: dotnet build --configuration Debug
-
-      - name: Package
+      # 版本号只从 Directory.Build.props 经 MSBuild 求值读取；
+      # 变体名只从 Packaging/Variants.props 读取，workflow 不另写一份。
+      # 通道的显示名与 prerelease 只从 Packaging/Channels.props 读取；
+      # 通道只影响 Release 说明与 prerelease 标记，不进入 tag、包名或目录名。
+      - name: Resolve version, variants and channel
         shell: pwsh
         run: |
-          $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
-          $zipName = "ClassDock-Nightly-${timestamp}-win-x64.zip"
+          $version = dotnet msbuild ClassDock.csproj -getProperty:Version -p:Platform=$env:PLATFORM -nologo |
+            Where-Object { $_ -match '^\d+\.\d+' } | Select-Object -Last 1
+          if (-not $version) { throw "无法读取 Version（Directory.Build.props）" }
+          $version = $version.Trim()
 
-          $publishDir = "bin\Debug\net10.0-windows10.0.19041.0\win-x64"
+          function Read-VariantProp([string]$name) {
+            $node = Select-Xml -Path Packaging\Variants.props -XPath "//$name" | Select-Object -First 1
+            if (-not $node) { throw "Packaging/Variants.props 缺少 $name" }
+            return $node.Node.InnerText.Trim()
+          }
+          $full = Read-VariantProp 'VariantFrameworkDependentName'
+          $self = Read-VariantProp 'VariantSelfContainedName'
 
-          if (-not (Test-Path $publishDir)) {
-            Write-Error "未找到构建输出目录: $publishDir"
-            exit 1
+          # 通道优先级：手动触发的输入 > 提交信息里的 [channel: xxx] 标记 > DP。
+          # 通道只用于 Release 说明与 prerelease 标记，不影响 tag、包名和目录名。
+          $channelKey = $null
+          $channelSource = $null
+          if ($env:CHANNEL_INPUT) {
+            $channelKey = $env:CHANNEL_INPUT.Trim().ToLowerInvariant()
+            $channelSource = '手动触发输入'
+          } else {
+            $commitMessage = git log -1 --pretty=%B
+            if ($commitMessage -match '\[channel:\s*([A-Za-z0-9._-]+)\s*\]') {
+              $channelKey = $Matches[1].ToLowerInvariant()
+              $channelSource = '提交信息标记'
+            } else {
+              $channelKey = 'dp'
+              $channelSource = '默认（提交信息无标记）'
+            }
           }
 
-          Compress-Archive -Path "$publishDir\*" -DestinationPath $zipName -Force
+          # CI 只接受 Channels.props 里 CiProducible=true 的通道（dp / pre-release）。
+          # official / beta 由人工发布，标记无效时一律 warning 并回落 dp，不产出正式版。
+          $node = Select-Xml -Path Packaging\Channels.props -XPath "//ReleaseChannel[@Include='$channelKey']" |
+            Select-Object -First 1
+          if ($node -and $node.Node.GetAttribute('CiProducible') -eq 'true') {
+            $channel = $node.Node
+          } else {
+            if ($node) {
+              Write-Warning "通道 '$channelKey' 不由 CI 产出（CiProducible=false），回落到 dp"
+              $channelSource = '默认（通道不可由 CI 产出）'
+            } else {
+              Write-Warning "通道 '$channelKey' 不在 Packaging/Channels.props 中，回落到 dp"
+              $channelSource = '默认（通道无效）'
+            }
+            $channelKey = 'dp'
+            $channel = (Select-Xml -Path Packaging\Channels.props -XPath "//ReleaseChannel[@Include='dp']" |
+              Select-Object -First 1).Node
+            if (-not $channel) { throw "Packaging/Channels.props 没有通道 dp" }
+          }
+          $channelName = $channel.GetAttribute('DisplayName').Trim()
+          $channelPrerelease = $channel.GetAttribute('Prerelease').Trim().ToLowerInvariant()
 
-          echo "ZIP_NAME=$zipName" >> $env:GITHUB_ENV
+          "VERSION=$version" >> $env:GITHUB_ENV
+          "VARIANT_FULL=$full" >> $env:GITHUB_ENV
+          "VARIANT_SELF_CONTAINED=$self" >> $env:GITHUB_ENV
+          "CHANNEL_NAME=$channelName" >> $env:GITHUB_ENV
+          "CHANNEL_SOURCE=$channelSource" >> $env:GITHUB_ENV
+          "CHANNEL_PRERELEASE=$channelPrerelease" >> $env:GITHUB_ENV
+          $now = [DateTime]::UtcNow
+          "BUILD_TIME=$($now.ToString('yyyy-MM-dd HH:mm:ss')) UTC" >> $env:GITHUB_ENV
+          # 只用于 zip 文件名，保证字典序即时间序；不进入 Version / 目录名 / artifact 名。
+          "BUILD_STAMP=$($now.ToString('yyyyMMddTHHmm'))" >> $env:GITHUB_ENV
+
+          Write-Host "版本：$version"
+          Write-Host "变体：$full / $self"
+          Write-Host "通道：$channelName（$channelKey，来源=$channelSource，prerelease=$channelPrerelease）"
+
+      # 启动器若启用 PublishAot，下面步骤会真实执行 AOT 编译；工具链缺失则构建红灯，不会假绿。
+      - name: Report launcher publish mode
+        shell: pwsh
+        run: |
+          $aot = dotnet msbuild Launcher\ClassDock.Launcher.csproj -getProperty:PublishAot -p:Configuration=$env:CONFIGURATION -nologo |
+            Where-Object { $_ -match '^(true|false)$' } | Select-Object -Last 1
+          Write-Host "启动器 PublishAot=$aot"
+
+      # 复用项目内的 AssembleVariants：产出 bin\x64\Release\dist\ClassDock-{Version}-{变体}\
+      # （根启动器 ClassDock.exe + App-{Version}\），workflow 不手工拼复制步骤。
+      - name: Build variants (AssembleVariants)
+        shell: pwsh
+        run: |
+          dotnet build ClassDock.csproj -c $env:CONFIGURATION -p:Platform=$env:PLATFORM --nologo
+
+      - name: Validate layout and package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $distRoot = Join-Path $env:GITHUB_WORKSPACE "bin\$env:PLATFORM\$env:CONFIGURATION\dist"
+          $version = $env:VERSION
+          $appDirName = "App-$version"
+          $artifacts = Join-Path $env:GITHUB_WORKSPACE 'artifacts'
+          New-Item -ItemType Directory -Path $artifacts -Force | Out-Null
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+
+          $summary = @(
+            '| 变体 | 文件数 | 解包体积 | 压缩包体积 |',
+            '| --- | ---: | ---: | ---: |'
+          )
+
+          foreach ($variant in @($env:VARIANT_FULL, $env:VARIANT_SELF_CONTAINED)) {
+            $name = "ClassDock-$version-$variant"
+            $dir = Join-Path $distRoot $name
+            if (-not (Test-Path $dir)) { throw "缺少变体目录：$dir" }
+
+            # 1) 目录层级：根目录只有启动器 + App-{版本}
+            $problems = @()
+            if (-not (Test-Path (Join-Path $dir 'ClassDock.exe'))) {
+              $problems += '缺少根启动器 ClassDock.exe'
+            }
+            if (-not (Test-Path (Join-Path $dir "$appDirName\ClassDock.Desktop.exe"))) {
+              $problems += "缺少 $appDirName\ClassDock.Desktop.exe"
+            }
+            $topLevel = @(Get-ChildItem -Path $dir -Force | Select-Object -ExpandProperty Name | Sort-Object)
+            $expected = @('ClassDock.exe', $appDirName) | Sort-Object
+            if (Compare-Object -ReferenceObject $expected -DifferenceObject $topLevel) {
+              $problems += "根目录顶层应只有 ClassDock.exe 与 $appDirName，实际：$($topLevel -join ', ')"
+            }
+
+            # 2) 禁止内容：data、平铺的主程序、改名前的旧 ClassDock.exe、构建临时文件
+            if (Test-Path (Join-Path $dir 'data')) {
+              $problems += '根目录出现 data（运行时生成，不能进包）'
+            }
+            if (Test-Path (Join-Path $dir 'ClassDock.Desktop.exe')) {
+              $problems += '根目录出现 ClassDock.Desktop.exe（层级被平铺）'
+            }
+            if (Test-Path (Join-Path $dir "$appDirName\ClassDock.exe")) {
+              $problems += "$appDirName 内出现改名前的旧 ClassDock.exe"
+            }
+            $leftovers = @(Get-ChildItem -Path $dir -Recurse -Force -File |
+              Where-Object { $_.Name -match '\.(log|tmp)$' -or $_.FullName -like '*\_launcher\*' })
+            if ($leftovers.Count -gt 0) {
+              $problems += "存在开发期临时文件：$($leftovers[0].FullName)"
+            }
+
+            if ($problems.Count -gt 0) {
+              $problems | ForEach-Object { Write-Host "::error::$name：$_" }
+              throw "$name 布局校验失败"
+            }
+
+            # 3) 压缩：zip 根即包根。用 bsdtar 而不是 Compress-Archive，
+            #    避免 Windows PowerShell 把条目分隔符写成 \（部分解压工具会当成文件名）。
+            $zip = Join-Path $artifacts "$name-$env:BUILD_STAMP.zip"
+            if (Test-Path $zip) { Remove-Item $zip -Force }
+            $items = @(Get-ChildItem -LiteralPath $dir -Force | Select-Object -ExpandProperty Name)
+            Push-Location -LiteralPath $dir
+            try { tar.exe -a -c -f $zip @items } finally { Pop-Location }
+
+            $archive = [System.IO.Compression.ZipFile]::OpenRead($zip)
+            try { $entries = @($archive.Entries | ForEach-Object { $_.FullName }) }
+            finally { $archive.Dispose() }
+
+            $bad = @()
+            if ($entries -notcontains 'ClassDock.exe') {
+              $bad += '压缩包根缺少 ClassDock.exe'
+            }
+            if ($entries -notcontains "$appDirName/ClassDock.Desktop.exe") {
+              $bad += "压缩包缺少 $appDirName/ClassDock.Desktop.exe"
+            }
+            $stray = @($entries | Where-Object {
+              $_ -ne 'ClassDock.exe' -and -not $_.StartsWith("$appDirName/", [StringComparison]::OrdinalIgnoreCase)
+            })
+            if ($stray.Count -gt 0) {
+              $bad += "压缩包出现 $appDirName 之外的文件：$($stray[0])"
+            }
+            $forbidden = @($entries | Where-Object {
+              $_ -like 'data/*' -or
+              $_ -like "$appDirName/data/*" -or
+              $_ -eq "$appDirName/ClassDock.exe" -or
+              $_ -eq 'ClassDock.Desktop.exe' -or
+              $_ -like '_launcher/*'
+            })
+            if ($forbidden.Count -gt 0) {
+              $bad += "压缩包含禁止内容：$($forbidden[0])"
+            }
+            if ($bad.Count -gt 0) {
+              $bad | ForEach-Object { Write-Host "::error::$name：$_" }
+              throw "$name 压缩包校验失败"
+            }
+
+            $files = @(Get-ChildItem -Path $dir -Recurse -File)
+            $rawMB = [math]::Round(($files | Measure-Object Length -Sum).Sum / 1MB, 1)
+            $zipMB = [math]::Round((Get-Item $zip).Length / 1MB, 1)
+            $summary += "| $variant | $($files.Count) | $rawMB MB | $zipMB MB |"
+            Write-Host "$name：$($files.Count) 个文件，解包 $rawMB MB，压缩包 $zipMB MB"
+          }
+
+          $summary | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+      # 与 Release 附件是两套独立存储：artifact 名带版本、内含两个变体压缩包，互不覆盖。
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ClassDock-${{ env.VERSION }}-win-x64
+          path: artifacts/*.zip
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Collect commit message
+        shell: pwsh
+        run: |
           echo "COMMIT_MSG<<EOF" >> $env:GITHUB_ENV
           git log -1 --pretty=%B >> $env:GITHUB_ENV
           echo "EOF" >> $env:GITHUB_ENV
@@ -48,37 +253,47 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # 尝试获取旧 Release 的 ID，如果不存在则返回空
+          # tag 与包名不带通道标识：所有通道共用 rolling 的 nightly Release，
+          # 每次发布先删旧 Release 再建新的，避免同名附件冲突。
           $releaseId = gh release view nightly --json id -q .id 2>$null
-          
-          # 如果确实存在旧 Release，才执行删除
+
           if ($releaseId) {
             Write-Host "发现旧的 Nightly Release，正在删除..."
             gh release delete nightly --yes
           } else {
             Write-Host "未发现旧的 Nightly Release，跳过删除步骤。"
           }
-          
+
           # 强制返回成功状态码，防止 gh 命令的报错导致整个 Step 失败
           exit 0
-
 
       - name: Create nightly release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: nightly
           name: ClassDock Nightly
-          prerelease: true
+          prerelease: ${{ env.CHANNEL_PRERELEASE == 'true' }}
           generate_release_notes: false
           body: |
             > [!CAUTION]
-            > 这是自动构建的 Nightly 预览版本，无法保证稳定性，请勿提交此版本的 Issues。
+            > 这是自动构建版本，无法保证稳定性，请勿提交此版本的 Issues。
 
-            构建时间：${{ github.event.head_commit.timestamp }}
+            通道：${{ env.CHANNEL_NAME }}（${{ env.CHANNEL_PRERELEASE == 'true' && '预发布' || '正式' }}）
+            通道来源：${{ env.CHANNEL_SOURCE }}
+            构建时间：${{ env.BUILD_TIME }}
+            版本：${{ env.VERSION }}
 
             提交信息：
             ${{ env.COMMIT_MSG }}
+
+            | 变体 | 说明 |
+            | --- | --- |
+            | `${{ env.VARIANT_FULL }}` | 框架依赖，需安装 .NET 10 Desktop Runtime（x64） |
+            | `${{ env.VARIANT_SELF_CONTAINED }}` | 自带运行时，解压即用 |
+
+            解压后目录结构：根目录 `ClassDock.exe`（启动器）+ `App-${{ env.VERSION }}` 目录（主程序与运行库）；`data` 目录在首次运行时自动创建，不在压缩包内。
           files: |
-            ${{ env.ZIP_NAME }}
+            artifacts/ClassDock-${{ env.VERSION }}-${{ env.VARIANT_FULL }}-${{ env.BUILD_STAMP }}.zip
+            artifacts/ClassDock-${{ env.VERSION }}-${{ env.VARIANT_SELF_CONTAINED }}-${{ env.BUILD_STAMP }}.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

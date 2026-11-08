@@ -1,0 +1,31 @@
+<Project>
+
+  <!--
+    发布通道字典。通道 Key 是 workflow_dispatch 的选项值，也是提交信息里 [channel: xxx] 的标记值；
+    通道只影响 Release 说明文字与 prerelease 标记，不进入 tag、包名或目录名。
+
+    CiProducible 标记该通道能否由 CI 自动产出：
+      true   dp、pre-release —— workflow_dispatch 可选，提交信息标记有效
+      false  official、beta —— 由人工发布，CI 收到这两个标记会 warning 并回落 dp
+    改名（如 DP → MyriadPhenomena ɑ）只改 DisplayName，Key 与 CiProducible 保持不变。
+  -->
+  <ItemGroup>
+    <ReleaseChannel Include="official"
+                    DisplayName="Official"
+                    Prerelease="false"
+                    CiProducible="false" />
+    <ReleaseChannel Include="pre-release"
+                    DisplayName="Pre-Release"
+                    Prerelease="true"
+                    CiProducible="true" />
+    <ReleaseChannel Include="beta"
+                    DisplayName="Beta"
+                    Prerelease="true"
+                    CiProducible="false" />
+    <ReleaseChannel Include="dp"
+                    DisplayName="DP"
+                    Prerelease="true"
+                    CiProducible="true" />
+  </ItemGroup>
+
+</Project>

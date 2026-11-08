@@ -83,4 +83,20 @@ internal static class DwmGlass
         int pref = DwmwcpDoNotRound;
         DwmSetWindowAttribute(hwnd, DwmwaWindowCornerPreference, ref pref, sizeof(int));
     }
+
+    // ── 窗口边框 ──
+
+    private const int DwmwaBorderColor = 34;
+    private const int DwmwaColorNone = unchecked((int)0xFFFFFFFE);
+
+    /// <summary>
+    /// 关闭 DWM 沿窗口外形绘制的那一圈 1px 系统边框。
+    /// 玻璃帧铺满客户区后窗口内部已由 XAML 卡片自己描边，DWM 边框是多余的；
+    /// 且它取窗口自身的明暗设定（本应用窗口始终按浅色注册），深色面板下会露出一圈浅色描边。
+    /// </summary>
+    public static void DisableBorder(IntPtr hwnd)
+    {
+        int none = DwmwaColorNone;
+        DwmSetWindowAttribute(hwnd, DwmwaBorderColor, ref none, sizeof(int));
+    }
 }

@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>ClassDock.Launcher</RootNamespace>
+    <!-- 根目录里的启动器就叫 ClassDock.exe -->
+    <AssemblyName>ClassDock</AssemblyName>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationIcon>..\Assets\AppIcon.ico</ApplicationIcon>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <!--
+      启动器优先 NativeAOT（自带运行时，任何机器都能先起来）。
+      本机 AOT 工具链不完整（ILCompiler 调 link.exe 报 MSB3073），按预案回退到
+      self-contained + trimming + 单文件；工具链补齐后把 PublishAot 改回 true 即可。
+    -->
+    <PublishAot>false</PublishAot>
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <PublishTrimmed>true</PublishTrimmed>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <DebugType>embedded</DebugType>
+  </PropertyGroup>
+
+</Project>

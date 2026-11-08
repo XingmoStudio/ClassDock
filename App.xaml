@@ -19,6 +19,13 @@
                     <SolidColorBrush x:Key="AppTextBrush" Color="#FF2B2B2B" />
                     <SolidColorBrush x:Key="AppSecondaryTextBrush" Color="#66000000" />
                     <SolidColorBrush x:Key="AppTertiaryTextBrush" Color="#99000000" />
+                    <!-- 主页功能卡：上部图标区的淡色底与图标色 -->
+                    <SolidColorBrush x:Key="HomeCardWarmBackgroundBrush" Color="#FFF7EFE8" />
+                    <SolidColorBrush x:Key="HomeCardWarmIconBrush" Color="#FFB07A52" />
+                    <SolidColorBrush x:Key="HomeCardCoolBackgroundBrush" Color="#FFEFF3F7" />
+                    <SolidColorBrush x:Key="HomeCardCoolIconBrush" Color="#FF5C7488" />
+                    <SolidColorBrush x:Key="HomeCardNeutralBackgroundBrush" Color="#FFF1F0F7" />
+                    <SolidColorBrush x:Key="HomeCardNeutralIconBrush" Color="#FF6A629D" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Default">
                     <SolidColorBrush x:Key="AppPageBackgroundBrush" Color="#FFF9F9F9" />
@@ -28,6 +35,13 @@
                     <SolidColorBrush x:Key="AppTextBrush" Color="#FF2B2B2B" />
                     <SolidColorBrush x:Key="AppSecondaryTextBrush" Color="#66000000" />
                     <SolidColorBrush x:Key="AppTertiaryTextBrush" Color="#99000000" />
+                    <!-- 主页功能卡：上部图标区的淡色底与图标色 -->
+                    <SolidColorBrush x:Key="HomeCardWarmBackgroundBrush" Color="#FFF7EFE8" />
+                    <SolidColorBrush x:Key="HomeCardWarmIconBrush" Color="#FFB07A52" />
+                    <SolidColorBrush x:Key="HomeCardCoolBackgroundBrush" Color="#FFEFF3F7" />
+                    <SolidColorBrush x:Key="HomeCardCoolIconBrush" Color="#FF5C7488" />
+                    <SolidColorBrush x:Key="HomeCardNeutralBackgroundBrush" Color="#FFF1F0F7" />
+                    <SolidColorBrush x:Key="HomeCardNeutralIconBrush" Color="#FF6A629D" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
                     <SolidColorBrush x:Key="AppPageBackgroundBrush" Color="#FF202020" />
@@ -37,6 +51,13 @@
                     <SolidColorBrush x:Key="AppTextBrush" Color="#FFFFFFFF" />
                     <SolidColorBrush x:Key="AppSecondaryTextBrush" Color="#99FFFFFF" />
                     <SolidColorBrush x:Key="AppTertiaryTextBrush" Color="#99FFFFFF" />
+                    <!-- 主页功能卡：上部图标区的淡色底与图标色 -->
+                    <SolidColorBrush x:Key="HomeCardWarmBackgroundBrush" Color="#FF3A322B" />
+                    <SolidColorBrush x:Key="HomeCardWarmIconBrush" Color="#FFD8A87C" />
+                    <SolidColorBrush x:Key="HomeCardCoolBackgroundBrush" Color="#FF2B333A" />
+                    <SolidColorBrush x:Key="HomeCardCoolIconBrush" Color="#FF9BB7CC" />
+                    <SolidColorBrush x:Key="HomeCardNeutralBackgroundBrush" Color="#FF312F3A" />
+                    <SolidColorBrush x:Key="HomeCardNeutralIconBrush" Color="#FFB0A8DC" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
         </ResourceDictionary>

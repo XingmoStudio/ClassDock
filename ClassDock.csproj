@@ -1,11 +1,15 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!-- 变体命名与发布参数集中一处，见 Packaging\Variants.props -->
+  <Import Project="Packaging\Variants.props" />
+
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
     <RootNamespace>ClassDock</RootNamespace>
-    <AssemblyName>ClassDock</AssemblyName>
+    <!-- 主程序改名：根目录只保留启动器 ClassDock.exe -->
+    <AssemblyName>ClassDock.Desktop</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Platforms>x64</Platforms>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
@@ -30,7 +34,12 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="Assets\Title.png">
+    <!-- 启动器是独立项目，不参与主程序编译 -->
+    <Compile Remove="Launcher\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Assets\Banner.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Content Include="Assets\Eraser.png">
@@ -42,6 +51,46 @@
     <Content Include="Assets\AppIcon.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <Content Include="Assets\SecRandom.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\ClassislandNav.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
+
+  <!--
+    发布布局（每次 build 自动产出，无需手工改名）：
+      dist\ClassDock-{版本}-{变体}\ClassDock.exe        启动器（自带运行时）
+      dist\ClassDock-{版本}-{变体}\App-{版本}\           主程序与运行库/.pri/.xbf/Assets
+      dist\ClassDock-{版本}-{变体}\data\                运行时生成，构建不参与
+    变体名与 self-contained 参数来自 Packaging\Variants.props。
+  -->
+  <Target Name="AssembleVariants" AfterTargets="Build" Condition="'$(AssembleVariants)' != 'false'">
+    <PropertyGroup>
+      <DistRoot>$(MSBuildProjectDirectory)\bin\$(Platform)\$(Configuration)\dist</DistRoot>
+      <LauncherStage>$(DistRoot)\_launcher</LauncherStage>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <PackageVariant Include="$(VariantFrameworkDependentName)"
+                      SelfContained="$(VariantFrameworkDependentSelfContained)" />
+      <PackageVariant Include="$(VariantSelfContainedName)"
+                      SelfContained="$(VariantSelfContainedSelfContained)" />
+    </ItemGroup>
+
+    <!-- 启动器只发布一次，两个变体共用同一份（自带运行时，不依赖目标机 .NET） -->
+    <Exec Command="dotnet publish &quot;$(MSBuildProjectDirectory)\Launcher\ClassDock.Launcher.csproj&quot; -c $(Configuration) -o &quot;$(LauncherStage)&quot; --nologo" />
+
+    <!-- 主程序：每个变体独立输出，目录名带变体后缀，互不覆盖 -->
+    <RemoveDir Directories="@(PackageVariant->'$(DistRoot)\ClassDock-$(Version)-%(Identity)')" />
+    <Exec Command="dotnet publish &quot;$(MSBuildProjectFullPath)&quot; -c $(Configuration) -p:Platform=$(Platform) -r win-x64 -p:SelfContained=%(PackageVariant.SelfContained) -p:AssembleVariants=false -o &quot;$(DistRoot)\ClassDock-$(Version)-%(PackageVariant.Identity)\App-$(Version)&quot; --nologo" />
+
+    <Copy SourceFiles="$(LauncherStage)\ClassDock.exe"
+          DestinationFolder="$(DistRoot)\ClassDock-$(Version)-%(PackageVariant.Identity)" />
+    <RemoveDir Directories="$(LauncherStage)" />
+
+    <Message Importance="high" Text="变体输出：$(DistRoot)\ClassDock-$(Version)-%(PackageVariant.Identity)" />
+  </Target>
 
 </Project>

@@ -28,6 +28,8 @@ public sealed partial class PanelWindow : Window
         InitializeComponent();
         Hwnd = WindowNative.GetWindowHandle(this);
         DwmGlass.Enable(Hwnd);
+        // 玻璃帧 + 卡片自带描边后，DWM 仍会在窗口外沿画一圈浅色系统边框，深色下就是那条白边
+        DwmGlass.DisableBorder(Hwnd);
 
         // 面板跟随统一主题，功能图标使用应用强调色（设置按钮保持默认样式）
         AppTheme.Apply(Root);

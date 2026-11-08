@@ -1,11 +1,27 @@
-# .NET
+# ==== .NET 常规构建缓存与本地用户文件 ====
 bin/
 obj/
+.vs/
 *.user
 *.suo
-.vs/
+
+# ==== 本项目构建产物（实际都在 bin/ 下，按真实目录结构显式列出便于对照） ====
+# 变体发布目录：根启动器 ClassDock.exe + App-{版本号}\
+bin/x64/Debug/dist/
+bin/x64/Release/dist/
+# 早期手工试验遗留的 layout 目录（根启动器 + App-{版本} 的同构副本）
+bin/x64/Debug/layout/
+bin/x64/Release/layout/
+# CI workflow 打包出的 zip
 artifacts/
 
-# IDE
+# ==== 运行期生成（首次运行才创建，不随仓库分发） ====
+# 程序数据：Config.json、logs/、Backup/
+/data/
+# 构建生成的版本目录，根目录下出现时不入库（发布目录内的已被 bin/ 覆盖）
+/App-*/
+
+# ==== 截图工具与 IDE ====
+.screenshots/
 .idea/
 *.swp

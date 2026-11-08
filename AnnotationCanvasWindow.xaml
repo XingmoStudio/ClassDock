@@ -126,7 +126,7 @@
                 <Setter Property="Padding" Value="0" />
                 <Setter Property="BorderThickness" Value="0" />
                 <Setter Property="Background" Value="Transparent" />
-                <Setter Property="Foreground" Value="#FF2B2B2B" />
+                <Setter Property="Foreground" Value="{ThemeResource AppTextBrush}" />
                 <Setter Property="Template" Value="{StaticResource ToolToggleTemplate}" />
             </Style>
 
@@ -136,7 +136,7 @@
                 <Setter Property="Padding" Value="0" />
                 <Setter Property="BorderThickness" Value="0" />
                 <Setter Property="Background" Value="Transparent" />
-                <Setter Property="Foreground" Value="#FF2B2B2B" />
+                <Setter Property="Foreground" Value="{ThemeResource AppTextBrush}" />
                 <Setter Property="Template" Value="{StaticResource ToolButtonTemplate}" />
             </Style>
 
@@ -146,7 +146,7 @@
                 <Setter Property="Padding" Value="14,0" />
                 <Setter Property="BorderThickness" Value="0" />
                 <Setter Property="Background" Value="Transparent" />
-                <Setter Property="Foreground" Value="#FF2B2B2B" />
+                <Setter Property="Foreground" Value="{ThemeResource AppTextBrush}" />
                 <Setter Property="FontSize" Value="12" />
                 <Setter Property="HorizontalAlignment" Value="Stretch" />
                 <Setter Property="Template" Value="{StaticResource ToolToggleTemplate}" />
@@ -167,8 +167,8 @@
             Margin="0,0,80,0"
             HorizontalAlignment="Right"
             VerticalAlignment="Center"
-            Background="#FFFFFFFF"
-            BorderBrush="#1A000000"
+            Background="{ThemeResource AppCardBackgroundBrush}"
+            BorderBrush="{ThemeResource AppCardBorderBrush}"
             BorderThickness="1"
             CornerRadius="12"
             Padding="16"
@@ -192,7 +192,7 @@
                             Width="300"
                             Height="96"
                             Data="M10,68 C40,20 100,14 150,46 C190,72 240,78 290,34"
-                            Stroke="#FF3A3A3A"
+                            Stroke="{ThemeResource AppTextBrush}"
                             StrokeEndLineCap="Round"
                             StrokeStartLineCap="Round"
                             StrokeLineJoin="Round"
@@ -222,7 +222,7 @@
                             x:Name="ThicknessLabel"
                             VerticalAlignment="Center"
                             FontSize="13"
-                            Foreground="#FF3A3A3A"
+                            Foreground="{ThemeResource AppTextBrush}"
                             Text="粗细 3" />
                         <StackPanel
                             Grid.Column="1"
@@ -347,7 +347,7 @@
                 <Border
                     Grid.Column="1"
                     Padding="6"
-                    BorderBrush="#1F000000"
+                    BorderBrush="{ThemeResource AppCardBorderBrush}"
                     BorderThickness="1"
                     CornerRadius="8">
                     <StackPanel Spacing="4">
@@ -378,10 +378,14 @@
                                     <Path
                                         Width="20" Height="20"
                                         Data="M3.5 2a.5.5 0 0 1 .5.5v4a.5.5 0 0 0 .5.5h11a.5.5 0 0 0 .5-.5v-4a.5.5 0 0 1 1 0v4a1.5 1.5 0 0 1-1 1.415V9a2 2 0 0 1-2 2v2.073a2 2 0 0 1-1.106 1.789l-6.17 3.085A.5.5 0 0 1 6 17.5V11a2 2 0 0 1-2-2V7.915A1.5 1.5 0 0 1 3 6.5v-4a.5.5 0 0 1 .5-.5M5 8v1a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V8zM7 11v5.691l5.447-2.724a1 1 0 0 0 .553-.894V11z"
-                                        Fill="#FF2B2B2B"
+                                        Fill="{ThemeResource AppTextBrush}"
                                         Stretch="None" />
                                 </Viewbox>
-                                <TextBlock VerticalAlignment="Center" FontSize="13" Text="荧光笔" />
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    FontSize="13"
+                                    Foreground="{ThemeResource AppTextBrush}"
+                                    Text="荧光笔" />
                             </StackPanel>
                         </ToggleButton>
                         <ToggleButton
@@ -395,10 +399,14 @@
                                     <Path
                                         Width="20" Height="20"
                                         Data="M17.18 2.926a2.975 2.975 0 0 0-4.26-.054l-9.375 9.375a2.44 2.44 0 0 0-.655 1.194l-.878 3.95a.5.5 0 0 0 .597.597l3.926-.873a2.5 2.5 0 0 0 1.234-.678l7.98-7.98l.337.336a1 1 0 0 1 0 1.414l-.94.94a.5.5 0 0 0 .708.706l.939-.94a2 2 0 0 0 0-2.828l-.336-.336l.67-.67a2.975 2.975 0 0 0 .052-4.153m-3.553.653a1.975 1.975 0 0 1 2.793 2.793L7.062 15.73a1.5 1.5 0 0 1-.744.409l-3.16.702l.708-3.183a1.43 1.43 0 0 1 .387-.704z"
-                                        Fill="#FF2B2B2B"
+                                        Fill="{ThemeResource AppTextBrush}"
                                         Stretch="None" />
                                 </Viewbox>
-                                <TextBlock VerticalAlignment="Center" FontSize="13" Text="硬笔" />
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    FontSize="13"
+                                    Foreground="{ThemeResource AppTextBrush}"
+                                    Text="硬笔" />
                             </StackPanel>
                         </ToggleButton>
                         <ToggleButton
@@ -411,10 +419,14 @@
                                     <Path
                                         Width="20" Height="20"
                                         Data="M17.18 2.926a2.975 2.975 0 0 0-4.26-.054l-9.375 9.375a2.44 2.44 0 0 0-.655 1.194l-.878 3.95a.5.5 0 0 0 .597.597l3.926-.873a2.5 2.5 0 0 0 1.234-.678l7.98-7.98l.337.336a1 1 0 0 1 0 1.414l-.94.94a.5.5 0 0 0 .708.706l.939-.94a2 2 0 0 0 0-2.828l-.336-.336l.67-.67a2.975 2.975 0 0 0 .052-4.153m-3.553.653a1.975 1.975 0 0 1 2.793 2.793L7.062 15.73a1.5 1.5 0 0 1-.744.409l-3.16.702l.708-3.183a1.43 1.43 0 0 1 .387-.704z"
-                                        Fill="#FF2B2B2B"
+                                        Fill="{ThemeResource AppTextBrush}"
                                         Stretch="None" />
                                 </Viewbox>
-                                <TextBlock VerticalAlignment="Center" FontSize="13" Text="软笔" />
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    FontSize="13"
+                                    Foreground="{ThemeResource AppTextBrush}"
+                                    Text="软笔" />
                             </StackPanel>
                         </ToggleButton>
                     </StackPanel>
@@ -429,8 +441,8 @@
             Margin="0,0,80,0"
             HorizontalAlignment="Right"
             VerticalAlignment="Center"
-            Background="#FFFFFFFF"
-            BorderBrush="#1A000000"
+            Background="{ThemeResource AppCardBackgroundBrush}"
+            BorderBrush="{ThemeResource AppCardBorderBrush}"
             BorderThickness="1"
             CornerRadius="12"
             Padding="16"
@@ -451,13 +463,13 @@
                                 Width="20"
                                 Height="20"
                                 Data="M8.5 4h3a1.5 1.5 0 0 0-3 0m-1 0a2.5 2.5 0 0 1 5 0h5a.5.5 0 0 1 0 1h-1.054l-1.194 10.344A3 3 0 0 1 12.272 18H7.728a3 3 0 0 1-2.98-2.656L3.554 5H2.5a.5.5 0 0 1 0-1zM5.741 15.23A2 2 0 0 0 7.728 17h4.544a2 2 0 0 0 1.987-1.77L15.439 5H4.561zM8.5 7.5A.5.5 0 0 1 9 8v6a.5.5 0 0 1-1 0V8a.5.5 0 0 1 .5-.5M12 8a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"
-                                Fill="#FF2B2B2B"
+                                Fill="{ThemeResource AppTextBrush}"
                                 Stretch="None" />
                         </Viewbox>
                         <TextBlock
                             HorizontalAlignment="Center"
                             FontSize="12"
-                            Foreground="#FF2B2B2B"
+                            Foreground="{ThemeResource AppTextBrush}"
                             Text="清空" />
                     </StackPanel>
                 </Button>
@@ -466,7 +478,7 @@
                 <Border
                     Width="1"
                     Margin="0,4"
-                    Background="#14000000" />
+                    Background="{ThemeResource AppCardBorderBrush}" />
 
                 <!-- 三档大小 -->
                 <StackPanel VerticalAlignment="Center" Spacing="8">
@@ -474,7 +486,7 @@
                         x:Name="EraserSizeLabel"
                         VerticalAlignment="Center"
                         FontSize="12"
-                        Foreground="#FF2B2B2B"
+                        Foreground="{ThemeResource AppTextBrush}"
                         Text="大小 中" />
                     <StackPanel Orientation="Horizontal" Spacing="4">
                         <Border
@@ -510,8 +522,8 @@
             Margin="0,0,80,0"
             HorizontalAlignment="Right"
             VerticalAlignment="Center"
-            Background="#FFFFFFFF"
-            BorderBrush="#1A000000"
+            Background="{ThemeResource AppCardBackgroundBrush}"
+            BorderBrush="{ThemeResource AppCardBorderBrush}"
             BorderThickness="1"
             CornerRadius="12"
             Padding="14"
@@ -521,41 +533,41 @@
                 <!-- 第一行：矩形 / 三角形 / 直线 / 箭头 / 圆形 -->
                 <StackPanel x:Name="ShapeRow1" Orientation="Horizontal" Spacing="4">
                     <Border Width="32" Height="32" Background="Transparent" CornerRadius="8" PointerPressed="OnShapeOptionPressed" Tag="Rectangle" ToolTipService.ToolTip="矩形">
-                        <Path Width="20" Height="20" Data="M4.5 5.5h11v9h-11z" Fill="Transparent" Stroke="#FF2B2B2B" StrokeThickness="1.5" Stretch="None" />
+                        <Path Width="20" Height="20" Data="M4.5 5.5h11v9h-11z" Fill="Transparent" Stroke="{ThemeResource AppTextBrush}" StrokeThickness="1.5" Stretch="None" />
                     </Border>
                     <Border Width="32" Height="32" Background="Transparent" CornerRadius="8" PointerPressed="OnShapeOptionPressed" Tag="Triangle" ToolTipService.ToolTip="三角形">
-                        <Path Width="20" Height="20" Data="M10 4.5 L16 15.5 H4 Z" Fill="Transparent" Stroke="#FF2B2B2B" StrokeThickness="1.5" Stretch="None" />
+                        <Path Width="20" Height="20" Data="M10 4.5 L16 15.5 H4 Z" Fill="Transparent" Stroke="{ThemeResource AppTextBrush}" StrokeThickness="1.5" Stretch="None" />
                     </Border>
                     <Border Width="32" Height="32" Background="Transparent" CornerRadius="8" PointerPressed="OnShapeOptionPressed" Tag="Line" ToolTipService.ToolTip="直线">
-                        <Path Width="20" Height="20" Data="M3.5 10 H16.5" Fill="Transparent" Stroke="#FF2B2B2B" StrokeThickness="1.5" Stretch="None" />
+                        <Path Width="20" Height="20" Data="M3.5 10 H16.5" Fill="Transparent" Stroke="{ThemeResource AppTextBrush}" StrokeThickness="1.5" Stretch="None" />
                     </Border>
                     <Border Width="32" Height="32" Background="Transparent" CornerRadius="8" PointerPressed="OnShapeOptionPressed" Tag="Arrow" ToolTipService.ToolTip="箭头">
-                        <Path Width="20" Height="20" Data="M3.5 10 H15 M10.5 5.5 L15.5 10 L10.5 14.5" Fill="Transparent" Stroke="#FF2B2B2B" StrokeThickness="1.5" Stretch="None" />
+                        <Path Width="20" Height="20" Data="M3.5 10 H15 M10.5 5.5 L15.5 10 L10.5 14.5" Fill="Transparent" Stroke="{ThemeResource AppTextBrush}" StrokeThickness="1.5" Stretch="None" />
                     </Border>
                     <Border Width="32" Height="32" Background="Transparent" CornerRadius="8" PointerPressed="OnShapeOptionPressed" Tag="Circle" ToolTipService.ToolTip="圆形">
-                        <Path Width="20" Height="20" Data="M4.5 10 a5.5 5.5 0 1 0 11 0 a5.5 5.5 0 1 0 -11 0 z" Fill="Transparent" Stroke="#FF2B2B2B" StrokeThickness="1.5" Stretch="None" />
+                        <Path Width="20" Height="20" Data="M4.5 10 a5.5 5.5 0 1 0 11 0 a5.5 5.5 0 1 0 -11 0 z" Fill="Transparent" Stroke="{ThemeResource AppTextBrush}" StrokeThickness="1.5" Stretch="None" />
                     </Border>
                 </StackPanel>
                 <!-- 第二行：圆角矩形 / 直角三角形 / 虚线箭头 / 椭圆 / 虚线 -->
                 <StackPanel x:Name="ShapeRow2" Orientation="Horizontal" Spacing="4">
                     <Border Width="32" Height="32" Background="Transparent" CornerRadius="8" PointerPressed="OnShapeOptionPressed" Tag="RoundedRectangle" ToolTipService.ToolTip="圆角矩形">
-                        <Path Width="20" Height="20" Data="M6.5 4.5h7a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-7a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2z" Fill="Transparent" Stroke="#FF2B2B2B" StrokeThickness="1.5" Stretch="None" />
+                        <Path Width="20" Height="20" Data="M6.5 4.5h7a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-7a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2z" Fill="Transparent" Stroke="{ThemeResource AppTextBrush}" StrokeThickness="1.5" Stretch="None" />
                     </Border>
                     <Border Width="32" Height="32" Background="Transparent" CornerRadius="8" PointerPressed="OnShapeOptionPressed" Tag="RightTriangle" ToolTipService.ToolTip="直角三角形">
-                        <Path Width="20" Height="20" Data="M5 4.5 V15.5 H16 Z" Fill="Transparent" Stroke="#FF2B2B2B" StrokeThickness="1.5" Stretch="None" />
+                        <Path Width="20" Height="20" Data="M5 4.5 V15.5 H16 Z" Fill="Transparent" Stroke="{ThemeResource AppTextBrush}" StrokeThickness="1.5" Stretch="None" />
                     </Border>
                     <Border Width="32" Height="32" Background="Transparent" CornerRadius="8" PointerPressed="OnShapeOptionPressed" Tag="DashedArrow" ToolTipService.ToolTip="虚线箭头">
-                        <Path Width="20" Height="20" Data="M3.5 10 H15 M10.5 5.5 L15.5 10 L10.5 14.5" Fill="Transparent" Stroke="#FF2B2B2B" StrokeDashArray="2,2" StrokeThickness="1.5" Stretch="None" />
+                        <Path Width="20" Height="20" Data="M3.5 10 H15 M10.5 5.5 L15.5 10 L10.5 14.5" Fill="Transparent" Stroke="{ThemeResource AppTextBrush}" StrokeDashArray="2,2" StrokeThickness="1.5" Stretch="None" />
                     </Border>
                     <Border Width="32" Height="32" Background="Transparent" CornerRadius="8" PointerPressed="OnShapeOptionPressed" Tag="Ellipse" ToolTipService.ToolTip="椭圆">
-                        <Path Width="20" Height="20" Data="M3 10 a7 4.5 0 1 0 14 0 a7 4.5 0 1 0 -14 0 z" Fill="Transparent" Stroke="#FF2B2B2B" StrokeThickness="1.5" Stretch="None" />
+                        <Path Width="20" Height="20" Data="M3 10 a7 4.5 0 1 0 14 0 a7 4.5 0 1 0 -14 0 z" Fill="Transparent" Stroke="{ThemeResource AppTextBrush}" StrokeThickness="1.5" Stretch="None" />
                     </Border>
                     <Border Width="32" Height="32" Background="Transparent" CornerRadius="8" PointerPressed="OnShapeOptionPressed" Tag="DashedLine" ToolTipService.ToolTip="虚线">
-                        <Path Width="20" Height="20" Data="M3.5 10 H16.5" Fill="Transparent" Stroke="#FF2B2B2B" StrokeDashArray="2,2" StrokeThickness="1.5" Stretch="None" />
+                        <Path Width="20" Height="20" Data="M3.5 10 H16.5" Fill="Transparent" Stroke="{ThemeResource AppTextBrush}" StrokeDashArray="2,2" StrokeThickness="1.5" Stretch="None" />
                     </Border>
                 </StackPanel>
                 <!-- 分隔线 + 三档粗细（右对齐斜杠，越粗越高） -->
-                <Border Height="1" Margin="0,2" Background="#14000000" />
+                <Border Height="1" Margin="0,2" Background="{ThemeResource AppCardBorderBrush}" />
                 <StackPanel x:Name="ShapeThicknessRow" Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right">
                     <Border Width="30" Height="30" Background="Transparent" CornerRadius="8" PointerPressed="OnShapeThicknessPressed" Tag="2" ToolTipService.ToolTip="细">
                         <Border Width="16" Height="2.5" Background="#FF8A8A8A" CornerRadius="1.25" RenderTransformOrigin="0.5,0.5">
@@ -582,20 +594,165 @@
             </StackPanel>
         </Border>
 
-        <!-- 工具面板（浅色）：列表排布的工具选项。选中尺规工具即弹出，再点一次收起 -->
+        <!-- 工具面板：列表排布的工具选项。选中尺规工具即弹出，再点一次收起 -->
         <Border
             x:Name="ToolPanel"
             Margin="0,0,80,0"
             HorizontalAlignment="Right"
             VerticalAlignment="Center"
-            Background="#FFFFFFFF"
-            BorderBrush="#1A000000"
+            Background="{ThemeResource AppCardBackgroundBrush}"
+            BorderBrush="{ThemeResource AppCardBorderBrush}"
             BorderThickness="1"
             CornerRadius="12"
             Padding="8"
             Visibility="Collapsed"
             PointerPressed="OnCardPressed">
             <StackPanel Spacing="2">
+                <!-- 尺规分区标题 -->
+                <TextBlock
+                    Margin="10,6,0,4"
+                    FontSize="12"
+                    Foreground="{ThemeResource AppTertiaryTextBrush}"
+                    Text="尺规" />
+                <!-- 尺具容器：直尺与三种新量具。
+                     图标路径里的相对 m 紧跟 z 时，XAML 解析器按“闭合前最后一点”而非子路径起点计算，
+                     子路径会整体偏移（三角板挖空失效、圆规针头跑到框底）；这里统一改写为等价的绝对 M。 -->
+                <Border
+                    Padding="2"
+                    BorderBrush="{ThemeResource AppCardBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8">
+                    <StackPanel Spacing="2">
+                        <!-- 屏幕刻度尺：召唤/收回一把直尺 -->
+                        <Border
+                            x:Name="ScreenRulerOption"
+                            Background="Transparent"
+                            CornerRadius="8"
+                            Padding="10,8"
+                            PointerPressed="OnScreenRulerPressed"
+                            ToolTipService.ToolTip="在屏幕上召唤一把直尺">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <Viewbox Width="20" Height="20">
+                                    <Path
+                                        Width="20"
+                                        Height="20"
+                                        Data="M12.5 2A1.5 1.5 0 0 1 14 3.5v13a1.5 1.5 0 0 1-1.5 1.5h-5A1.5 1.5 0 0 1 6 16.5v-13A1.5 1.5 0 0 1 7.5 2zM7.5 3a.5.5 0 0 0-.5.5v1h2.5a.5.5 0 0 1 0 1H7V7h3.5a.5.5 0 0 1 0 1H7v1.5h2.5a.5.5 0 0 1 0 1H7v1.504h3.5a.5.5 0 0 1 0 1H7V14.5h2.5a.5.5 0 0 1 0 1H7v1a.5.5 0 0 0 .5.5h5a.5.5 0 0 0 .5-.5v-13a.5.5 0 0 0-.5-.5z"
+                                        Fill="{ThemeResource AppTextBrush}"
+                                        Stretch="Uniform" />
+                                </Viewbox>
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    FontSize="13"
+                                    Foreground="{ThemeResource AppTextBrush}"
+                                    Text="屏幕刻度尺" />
+                            </StackPanel>
+                        </Border>
+                        <!-- 45° 三角板：每次点击召唤一把新的 -->
+                        <Border
+                            x:Name="Triangle45Option"
+                            Background="Transparent"
+                            CornerRadius="8"
+                            Padding="10,8"
+                            PointerPressed="OnTriangle45OptionPressed"
+                            ToolTipService.ToolTip="召唤一块 45° 三角板（可同时放多块）">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <Viewbox Width="20" Height="20">
+                                    <Path
+                                        Width="20"
+                                        Height="20"
+                                        Data="M13.293 5.25c.63-.63 1.707-.184 1.707.707V13.5a1.5 1.5 0 0 1-1.5 1.5H5.957c-.89 0-1.337-1.077-.707-1.707zM14 5.957L5.957 14H13.5a.5.5 0 0 0 .5-.5z"
+                                        Fill="{ThemeResource AppTextBrush}"
+                                        Stretch="Uniform" />
+                                </Viewbox>
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    FontSize="13"
+                                    Foreground="{ThemeResource AppTextBrush}"
+                                    Text="45° 三角板" />
+                            </StackPanel>
+                        </Border>
+                        <!-- 30°-60° 三角板：每次点击召唤一把新的 -->
+                        <Border
+                            x:Name="Triangle3060Option"
+                            Background="Transparent"
+                            CornerRadius="8"
+                            Padding="10,8"
+                            PointerPressed="OnTriangle3060OptionPressed"
+                            ToolTipService.ToolTip="召唤一块 30°-60° 三角板（可同时放多块）">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <Viewbox Width="20" Height="20">
+                                    <Path
+                                        Width="20"
+                                        Height="20"
+                                        Data="M13.293 5.25c.63-.63 1.707-.184 1.707.707V13.5a1.5 1.5 0 0 1-1.5 1.5H5.957c-.89 0-1.337-1.077-.707-1.707zM14 5.957L5.957 14H13.5a.5.5 0 0 0 .5-.5z"
+                                        Fill="{ThemeResource AppTextBrush}"
+                                        Stretch="Uniform" />
+                                </Viewbox>
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    FontSize="13"
+                                    Foreground="{ThemeResource AppTextBrush}"
+                                    Text="30°-60° 三角板" />
+                            </StackPanel>
+                        </Border>
+                        <!-- 量角器：每次点击召唤一把新的 -->
+                        <Border
+                            x:Name="ProtractorOption"
+                            Background="Transparent"
+                            CornerRadius="8"
+                            Padding="10,8"
+                            PointerPressed="OnProtractorOptionPressed"
+                            ToolTipService.ToolTip="召唤一把量角器（可同时放多把）">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <Viewbox Width="20" Height="20">
+                                    <Path
+                                        Width="20"
+                                        Height="20"
+                                        Data="M8.436 2.153a8 8 0 0 0-2.882 1.195A8 8 0 0 0 3.338 5.57A7.96 7.96 0 0 0 2 10a8 8 0 0 0 .156 1.578a8 8 0 0 0 1.191 2.867a8 8 0 0 0 2.218 2.214A7.96 7.96 0 0 0 10 18v-.002c.528 0 1.055-.05 1.56-.15a.5.5 0 0 0-.194-.981a7.2 7.2 0 0 1-2.574.03a7.005 7.005 0 0 1-5.716-5.865a7.3 7.3 0 0 1 0-2.06a7.005 7.005 0 0 1 5.75-5.874a7.2 7.2 0 0 1 2.54.035a.5.5 0 0 0 .194-.98a8 8 0 0 0-1.56-.15V2a8 8 0 0 0-1.561.152zM14.445 3.348a.5.5 0 0 0-.556.83a7 7 0 0 1 1.932 1.933a.5.5 0 1 0 .83-.556a8 8 0 0 0-2.206-2.207m3.402 5.091a.5.5 0 1 0-.98.194c.174.884.174 1.85 0 2.734a.5.5 0 1 0 .98.194c.2-1.01.2-2.111 0-3.122m-1.195 6.006a.5.5 0 1 0-.831-.556a7 7 0 0 1-1.932 1.932a.5.5 0 1 0 .556.831a8 8 0 0 0 2.207-2.207"
+                                        Fill="{ThemeResource AppTextBrush}"
+                                        Stretch="Uniform" />
+                                </Viewbox>
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    FontSize="13"
+                                    Foreground="{ThemeResource AppTextBrush}"
+                                    Text="量角器" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- 圆规：与尺具同处「尺规」容器内 -->
+                        <Border
+                            x:Name="CompassOption"
+                            Background="Transparent"
+                            CornerRadius="8"
+                            Padding="10,8"
+                            PointerPressed="OnCompassOptionPressed"
+                            ToolTipService.ToolTip="在屏幕上召唤一只圆规">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <Viewbox Width="20" Height="20">
+                                    <Path
+                                        Width="20"
+                                        Height="20"
+                                        Data="M4 16V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v11a1 1 0 0 1-1 1H5a1 1 0 0 0 1 1h9.5a.5.5 0 0 1 0 1H6a2 2 0 0 1-2-2M15 4a1 1 0 0 0-1-1H6a1 1 0 0 0-1 1v11h10zM10 4.5a.5.5 0 0 1 .5.5v1.063a2 2 0 0 1 .743 3.504l1.214 2.73a.5.5 0 0 1-.914.406l-1.213-2.73a2 2 0 0 1-.66 0l-1.213 2.73a.5.5 0 1 1-.914-.406l1.213-2.73A2 2 0 0 1 9.5 6.063V5a.5.5 0 0 1 .5-.5m-.5 2.634a1 1 0 1 0 1 1.731a1 1 0 0 0-1-1.731"
+                                        Fill="{ThemeResource AppTextBrush}"
+                                        Stretch="Uniform" />
+                                </Viewbox>
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    FontSize="13"
+                                    Foreground="{ThemeResource AppTextBrush}"
+                                    Text="圆规" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </Border>
+
+                <!-- 选项分区标题 -->
+                <TextBlock
+                    Margin="10,10,0,4"
+                    FontSize="12"
+                    Foreground="{ThemeResource AppTertiaryTextBrush}"
+                    Text="选项" />
                 <!-- 保存至本地：画布内容连带底图导出为图片 -->
                 <Border
                     Background="Transparent"
@@ -609,72 +766,14 @@
                                 Width="24"
                                 Height="24"
                                 Data="M13.821 6.5h5.929A2.25 2.25 0 0 1 22 8.75v9.5A2.75 2.75 0 0 1 19.25 21H4.75A2.75 2.75 0 0 1 2 18.25V4.75A2.75 2.75 0 0 1 4.75 2h3.733c1.562 0 2.098.52 2.64 1.206l1.4 1.794a.75.75 0 0 0 .548.5h5.679zM3.5 4.75v4.75h17V8.75a.75.75 0 0 0-.75-.75h-5.629a2.25 2.25 0 0 1-1.458-.5l-.25-.206l-1.4-1.793c-.293-.376-.549-.62-1.016-.686L4.75 3.5a1.25 1.25 0 0 0-1.25 1.25zM3.5 11v7.25c0 .69.56 1.25 1.25 1.25h14.5c.69 0 1.25-.56 1.25-1.25V11H3.5z"
-                                Fill="#FF2B2B2B"
+                                Fill="{ThemeResource AppTextBrush}"
                                 Stretch="None" />
                         </Viewbox>
                         <TextBlock
                             VerticalAlignment="Center"
                             FontSize="13"
-                            Foreground="#FF2B2B2B"
+                            Foreground="{ThemeResource AppTextBrush}"
                             Text="保存至本地" />
-                    </StackPanel>
-                </Border>
-                <!-- 屏幕刻度尺：召唤/收回一把直尺 -->
-                <Border
-                    x:Name="ScreenRulerOption"
-                    Background="Transparent"
-                    CornerRadius="8"
-                    Padding="10,8"
-                    PointerPressed="OnScreenRulerPressed"
-                    ToolTipService.ToolTip="在屏幕上召唤一把直尺">
-                    <StackPanel Orientation="Horizontal" Spacing="10">
-                        <Viewbox Width="20" Height="20">
-                            <Path
-                                Width="24"
-                                Height="24"
-                                Data="M17.25 3A2.75 2.75 0 0 1 20 5.75v12.5A2.75 2.75 0 0 1 17.25 21H6.75A2.75 2.75 0 0 1 4 18.25V5.75A2.75 2.75 0 0 1 6.75 3h10.5zm0 1.5H6.75c-.69 0-1.25.56-1.25 1.25v2h3.75a.75.75 0 0 1 0 1.5H5.5v2h2.75a.75.75 0 0 1 0 1.5H5.5v2h3.75a.75.75 0 0 1 0 1.5H5.5v3.75c0 .69.56 1.25 1.25 1.25h10.5c.69 0 1.25-.56 1.25-1.25V5.75c0-.69-.56-1.25-1.25-1.25z"
-                                Fill="#FF2B2B2B"
-                                Stretch="None" />
-                        </Viewbox>
-                        <TextBlock
-                            VerticalAlignment="Center"
-                            FontSize="13"
-                            Foreground="#FF2B2B2B"
-                            Text="屏幕刻度尺" />
-                    </StackPanel>
-                </Border>
-                <!-- 圆规：召唤/收回一只圆规 -->
-                <Border
-                    x:Name="CompassOption"
-                    Background="Transparent"
-                    CornerRadius="8"
-                    Padding="10,8"
-                    PointerPressed="OnCompassOptionPressed"
-                    ToolTipService.ToolTip="在屏幕上召唤一只圆规">
-                    <StackPanel Orientation="Horizontal" Spacing="10">
-                        <Viewbox Width="20" Height="20">
-                            <Canvas
-                                Width="24"
-                                Height="24">
-                                <Ellipse
-                                    Canvas.Left="10.3"
-                                    Canvas.Top="2.2"
-                                    Width="3.4"
-                                    Height="3.4"
-                                    Fill="#FF2B2B2B" />
-                                <Path
-                                    Data="M12 5.6 L7.2 19 M12 5.6 L16.8 19 M8.6 14 L15.4 14 M7.2 19 Q12 22.2 16.8 19"
-                                    Stroke="#FF2B2B2B"
-                                    StrokeEndLineCap="Round"
-                                    StrokeStartLineCap="Round"
-                                    StrokeThickness="1.5" />
-                            </Canvas>
-                        </Viewbox>
-                        <TextBlock
-                            VerticalAlignment="Center"
-                            FontSize="13"
-                            Foreground="#FF2B2B2B"
-                            Text="圆规" />
                     </StackPanel>
                 </Border>
             </StackPanel>
@@ -687,8 +786,8 @@
             Margin="0,0,12,0"
             HorizontalAlignment="Right"
             VerticalAlignment="Center"
-            Background="#FFFFFFFF"
-            BorderBrush="#14000000"
+            Background="{ThemeResource AppCardBackgroundBrush}"
+            BorderBrush="{ThemeResource AppCardBorderBrush}"
             BorderThickness="1"
             CornerRadius="8"
             Padding="6"
@@ -706,7 +805,7 @@
                             Width="24"
                             Height="24"
                             Data="M4.5 2.75a.75.75 0 0 0-1.5 0v3.5C3 7.216 3.784 8 4.75 8h.265l4.036 8.968a1.75 1.75 0 0 0 1.044.943A6 6 0 0 0 10 19c0 .671.09 1.366.363 1.921c.292.595.83 1.079 1.637 1.079s1.345-.484 1.637-1.079c.272-.555.363-1.25.363-1.921c0-.367-.027-.738-.095-1.09a1.75 1.75 0 0 0 1.044-.942L18.985 8h.265A1.75 1.75 0 0 0 21 6.25v-3.5a.75.75 0 0 0-1.5 0v3.5a.25.25 0 0 1-.25.25H4.75a.25.25 0 0 1-.25-.25zM6.66 8h10.68l-3.759 8.353a.25.25 0 0 1-.228.147h-2.706a.25.25 0 0 1-.228-.147zM11.613 18h.774c.071.256.113.594.113 1c0 .572-.083 1.002-.21 1.26c-.108.22-.195.24-.29.24s-.182-.02-.29-.24c-.127-.258-.21-.689-.21-1.26c0-.406.042-.744.113-1"
-                            Fill="#FF2B2B2B"
+                            Fill="{ThemeResource AppTextBrush}"
                             Stretch="None" />
                     </Viewbox>
                 </ToggleButton>
@@ -721,7 +820,7 @@
                             Width="24"
                             Height="24"
                             Data="M8.75 3.5A5.25 5.25 0 0 0 8 13.947v1.512A6.751 6.751 0 1 1 15.459 8h-1.512A5.25 5.25 0 0 0 8.75 3.5M12.25 9A3.25 3.25 0 0 0 9 12.25v6.5A3.25 3.25 0 0 0 12.25 22h6.5A3.25 3.25 0 0 0 22 18.75v-6.5A3.25 3.25 0 0 0 18.75 9ZM10.5 12.25c0-.966.784-1.75 1.75-1.75h6.5c.966 0 1.75.784 1.75 1.75v6.5a1.75 1.75 0 0 1-1.75 1.75h-6.5a1.75 1.75 0 0 1-1.75-1.75z"
-                            Fill="#FF2B2B2B"
+                            Fill="{ThemeResource AppTextBrush}"
                             Stretch="None" />
                     </Viewbox>
                 </ToggleButton>
@@ -736,7 +835,7 @@
                             Width="24"
                             Height="24"
                             Data="M15.841 2.661a2.25 2.25 0 0 0-3.19-.023l-9.598 9.508a2.25 2.25 0 0 0 .007 3.204l5.099 5.008a2.24 2.24 0 0 0 1.69.642h6.265a2.501 2.501 0 1 0 0-1.5h-3.953l8.583-8.673a2.25 2.25 0 0 0 .007-3.158zM9.75 19.5v.002a.75.75 0 0 1-.54-.214l-5.1-5.008a.75.75 0 0 1-.002-1.068l1.53-1.514l6.098 6.099l-1.468 1.483a.75.75 0 0 1-.468.22zM13.707 3.704a.75.75 0 0 1 1.063.007l4.91 5.009a.75.75 0 0 1-.002 1.052L12.79 16.73l-6.088-6.088z"
-                            Fill="#FF2B2B2B"
+                            Fill="{ThemeResource AppTextBrush}"
                             Stretch="None" />
                     </Viewbox>
                 </ToggleButton>
@@ -751,7 +850,7 @@
                             Width="24"
                             Height="24"
                             Data="M9.25 2A2.25 2.25 0 0 0 7 4.25v15.5A2.25 2.25 0 0 0 9.25 22h5.5A2.25 2.25 0 0 0 17 19.75V4.25A2.25 2.25 0 0 0 14.75 2zM8.5 19h1.75a.75.75 0 0 0 0-1.5H8.5V16h3.75a.75.75 0 0 0 0-1.5H8.5v-1.75h1.75a.75.75 0 0 0 0-1.5H8.5V9.5h3.75a.75.75 0 0 0 0-1.5H8.5V6.5h1.75a.75.75 0 0 0 0-1.5H8.5v-.75a.75.75 0 0 1 .75-.75h5.5a.75.75 0 0 1 .75.75v15.5a.75.75 0 0 1-.75.75h-5.5a.75.75 0 0 1-.75-.75z"
-                            Fill="#FF2B2B2B"
+                            Fill="{ThemeResource AppTextBrush}"
                             Stretch="None" />
                     </Viewbox>
                 </ToggleButton>
@@ -759,7 +858,7 @@
                 <Border
                     Height="1"
                     Margin="8,4"
-                    Background="#14000000" />
+                    Background="{ThemeResource AppCardBorderBrush}" />
                 <!-- 返回主面板 -->
                 <Button
                     x:Name="BackButton"
@@ -771,7 +870,7 @@
                             Width="24"
                             Height="24"
                             Data="M10.3 19.72a1 1 0 0 0 1.4-1.42L6.42 13h13.35a1 1 0 1 0 0-2H6.42l5.28-5.3a1 1 0 0 0-1.4-1.42l-7 7.01a1 1 0 0 0 0 1.42l7 7.01Z"
-                            Fill="#FF2B2B2B"
+                            Fill="{ThemeResource AppTextBrush}"
                             Stretch="None" />
                     </Viewbox>
                 </Button>
