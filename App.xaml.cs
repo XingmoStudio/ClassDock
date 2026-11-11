@@ -98,6 +98,9 @@ internal static class AppSettings
     /// <summary>测试与调试页是否已解锁（版本号连点 7 次并确认风险后置为 true）。</summary>
     public static bool DebugUnlocked { get; set; }
 
+    /// <summary>测试与调试页是否启用；关闭后侧边栏不再显示，需通过版本号连点重新启用。</summary>
+    public static bool DebugEnabled { get; set; } = true;
+
     /// <summary>打开设置窗口时是否默认落在主页。</summary>
     public static bool OpenHomeByDefault { get; set; }
 
@@ -173,6 +176,7 @@ internal static class AppSettings
                 PenTaperCorrection = model.PenTaperCorrection;
                 SpeedEraser = model.SpeedEraser;
                 DebugUnlocked = model.DebugUnlocked;
+                DebugEnabled = model.DebugEnabled;
                 OpenHomeByDefault = model.OpenHomeByDefault;
             }
         }
@@ -205,6 +209,7 @@ internal static class AppSettings
                     PenTaperCorrection = PenTaperCorrection,
                     SpeedEraser = SpeedEraser,
                     DebugUnlocked = DebugUnlocked,
+                    DebugEnabled = DebugEnabled,
                     OpenHomeByDefault = OpenHomeByDefault
                 }));
         }
@@ -230,6 +235,7 @@ internal static class AppSettings
         public bool PenTaperCorrection { get; set; } = true;
         public bool SpeedEraser { get; set; }
         public bool DebugUnlocked { get; set; }
+        public bool DebugEnabled { get; set; } = true;
         public bool OpenHomeByDefault { get; set; }
     }
 }
@@ -280,9 +286,11 @@ public partial class App : Application
         ShowErrorDialog(e.Exception);
     }
 
-    /// <summary>异常落盘，便于事后与自动化复现时读取。</summary>
+    /// <summary>异常落盘，便于事后与自动化复现时读取；同时写入统一分类日志供查看器展示。</summary>
     internal static void LogError(Exception? ex)
     {
+        if (ex is null) return;
+        AppLogger.Exception(ex);
         try
         {
             Directory.CreateDirectory(AppPaths.LogsDir);
@@ -663,6 +671,8 @@ public partial class App : Application
 
         // 主题服务先于任何窗口初始化，保证首个窗口即拿到正确的明暗与强调色
         AppTheme.Initialize();
+
+        AppLogger.Info("应用启动");
 
         // 已存在实例且未允许多开时：弹提示并结束本实例；
         // 崩溃静默重启路径跳过提示（旧进程随即退出，互斥体自然释放）

@@ -111,8 +111,11 @@ public sealed partial class SettingsWindow : Window
         // 二级条目在 XAML 中按顺序排列，这里统一补齐 Tag（与导航顺序一一对应）
         AssignNavTags(GeneralChildren, "basic", "appearance", "storage", "security", "shortcuts");
 
-        // 调试页默认隐藏，解锁后才出现在侧边栏
-        NavDebug.Visibility = AppSettings.DebugUnlocked ? Visibility.Visible : Visibility.Collapsed;
+        // 调试页默认隐藏，解锁且启用后才出现在侧边栏
+        NavDebug.Visibility = (AppSettings.DebugUnlocked && AppSettings.DebugEnabled)
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        DebugEnabledSwitch.IsOn = AppSettings.DebugEnabled;
 
         LoadCrashBehavior();
         LoadAppearanceSettings();
@@ -176,6 +179,63 @@ public sealed partial class SettingsWindow : Window
     {
         AppSettings.AllowMultiInstance = AllowMultiInstanceSwitch.IsOn;
         AppSettings.Save();
+    }
+
+    /// <summary>「启用测试与调试页」开关：关闭后隐藏侧边栏入口，需版本号连点重新启用。</summary>
+    private void OnDebugEnabledToggled(object sender, RoutedEventArgs e)
+    {
+        AppSettings.DebugEnabled = DebugEnabledSwitch.IsOn;
+        AppSettings.Save();
+        NavDebug.Visibility = DebugEnabledSwitch.IsOn ? Visibility.Visible : Visibility.Collapsed;
+        if (!DebugEnabledSwitch.IsOn)
+        {
+            // 正在调试页时切走，避免停留在已关闭的页面
+            ShowPage("about");
+            SelectNav(NavAbout, AboutAccent);
+        }
+    }
+
+    /// <summary>打开独立的日志查看器。</summary>
+    private void OnViewLogsClick(object sender, RoutedEventArgs e)
+    {
+        var viewer = new LogViewerWindow();
+        viewer.Activate();
+    }
+
+    /// <summary>导出日志：与查看器中的「导出」一致，另存 app.log 到用户指定位置。</summary>
+    private async void OnExportLogsClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var picker = new Windows.Storage.Pickers.FileSavePicker
+            {
+                SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.DocumentsLibrary,
+                SuggestedFileName = $"ClassDock-{DateTime.Now:yyyyMMdd-HHmmss}.log"
+            };
+            picker.FileTypeChoices.Add("日志文件", new List<string> { ".log", ".txt" });
+            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+
+            var file = await picker.PickSaveFileAsync();
+            if (file is null) return;
+
+            if (File.Exists(AppLogger.LogPath))
+            {
+                var bytes = await File.ReadAllBytesAsync(AppLogger.LogPath);
+                await File.WriteAllBytesAsync(file.Path, bytes);
+            }
+            else
+            {
+                await File.WriteAllTextAsync(file.Path, string.Empty);
+            }
+
+            await ShowMessageAsync("导出完成", $"日志已保存到：\n{file.Path}");
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Warn($"导出日志失败：{ex.Message}");
+            await ShowMessageAsync("导出失败", ex.Message);
+        }
     }
 
     /// <summary>导航按钮点击：切换右侧内容页与选中态。</summary>
@@ -1023,16 +1083,27 @@ public sealed partial class SettingsWindow : Window
         await dialog.ShowAsync();
     }
 
-    /// <summary>连续点击关于页版本号 7 次后解锁「测试与调试」，需要输入风险确认文本。</summary>
+    /// <summary>连续点击关于页版本号 7 次：首次解锁「测试与调试」，已解锁但被关闭时重新启用。</summary>
     private async void OnAboutVersionTapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
     {
-        if (AppSettings.DebugUnlocked) return;
+        if (AppSettings.DebugUnlocked && AppSettings.DebugEnabled) return;
 
         var now = DateTime.UtcNow;
         _versionTapCount = (now - _lastVersionTap).TotalSeconds <= 1.5 ? _versionTapCount + 1 : 1;
         _lastVersionTap = now;
         if (_versionTapCount < 7) return;
         _versionTapCount = 0;
+
+        // 已解锁但被关闭：直接重新启用，无需再次确认风险
+        if (AppSettings.DebugUnlocked)
+        {
+            AppSettings.DebugEnabled = true;
+            AppSettings.Save();
+            DebugEnabledSwitch.IsOn = true;
+            NavDebug.Visibility = Visibility.Visible;
+            await ShowMessageAsync("已重新启用", "「测试与调试」已恢复显示。");
+            return;
+        }
 
         var input = new TextBox
         {

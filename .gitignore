@@ -4,6 +4,7 @@ obj/
 .vs/
 *.user
 *.suo
+.vscode
 
 # ==== 本项目构建产物（实际都在 bin/ 下，按真实目录结构显式列出便于对照） ====
 # 变体发布目录：根启动器 ClassDock.exe + App-{版本号}\

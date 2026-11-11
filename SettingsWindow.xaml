@@ -771,7 +771,37 @@
                             FontSize="13"
                             Foreground="{ThemeResource AppSecondaryTextBrush}"
                             TextWrapping="Wrap"
-                            Text="高风险操作与诊断工具。崩溃处理方式已移至「通用 → 基本」。" />
+                            Text="!因本页引发错误导致软件崩溃概不负责。" />
+
+                        <!-- 调试页开关：关闭后侧边栏不再显示，需通过版本号连点重新启用 -->
+                        <Border
+                            Background="{ThemeResource AppCardBackgroundBrush}"
+                            BorderBrush="{ThemeResource AppCardBorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="16,14,16,16">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <StackPanel Spacing="4">
+                                    <TextBlock
+                                        FontSize="14"
+                                        FontWeight="SemiBold"
+                                        Text="启用测试与调试页" />
+                                    <TextBlock
+                                        FontSize="12"
+                                        Foreground="{ThemeResource AppSecondaryTextBrush}"
+                                        TextWrapping="Wrap"
+                                        Text="关闭后将隐藏侧边栏入口，需连续点击关于页版本号 7 次重新启用。" />
+                                </StackPanel>
+                                <ToggleSwitch
+                                    x:Name="DebugEnabledSwitch"
+                                    Grid.Column="1"
+                                    Margin="12,0,-12,0"
+                                    VerticalAlignment="Center"
+                                    OffContent=""
+                                    OnContent=""
+                                    Toggled="OnDebugEnabledToggled" />
+                            </Grid>
+                        </Border>
 
                         <Border
                             Background="{ThemeResource AppCardBackgroundBrush}"
@@ -783,14 +813,14 @@
                                 <TextBlock
                                     FontSize="14"
                                     FontWeight="SemiBold"
-                                    Text="主动抛出错误测试" />
+                                    Text="抛出错误测试" />
 
                                 <TextBlock
                                     Margin="0,2,0,0"
                                     FontSize="12"
                                     Foreground="{ThemeResource AppSecondaryTextBrush}"
                                     TextWrapping="Wrap"
-                                    Text="在输入框中键入需要报错的内容，点击按钮后软件将抛出未处理异常，用于验证上方选择的崩溃处理方式是否生效。" />
+                                    Text="在输入框中键入需要报错的内容，点击按钮后软件将抛出未处理异常，用于验证崩溃处理方式是否生效。" />
 
                                 <TextBox
                                     x:Name="CrashTestInput"
@@ -843,6 +873,38 @@
                                     Foreground="{ThemeResource AppSecondaryTextBrush}"
                                     TextWrapping="Wrap"
                                     Text="开启后再次启动 ClassDock 不再弹出“已经开启”的提示，多个实例可同时运行。" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- 日志 -->
+                        <Border
+                            Background="{ThemeResource AppCardBackgroundBrush}"
+                            BorderBrush="{ThemeResource AppCardBorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="16,14,16,16">
+                            <StackPanel Spacing="4">
+                                <TextBlock
+                                    FontSize="14"
+                                    FontWeight="SemiBold"
+                                    Text="日志" />
+                                <TextBlock
+                                    Margin="0,2,0,0"
+                                    FontSize="12"
+                                    Foreground="{ThemeResource AppSecondaryTextBrush}"
+                                    TextWrapping="Wrap"
+                                    Text="查看应用运行日志（信息、警告、错误等分类），或导出为文件。" />
+                                <StackPanel
+                                    Margin="0,10,0,0"
+                                    Orientation="Horizontal"
+                                    Spacing="10">
+                                    <Button
+                                        Click="OnViewLogsClick"
+                                        Content="查看日志" />
+                                    <Button
+                                        Click="OnExportLogsClick"
+                                        Content="导出日志" />
+                                </StackPanel>
                             </StackPanel>
                         </Border>
 
