@@ -153,6 +153,9 @@ internal static class AppSettings
         Load();
     }
 
+    /// <summary>从磁盘重新读取配置文件，覆盖当前内存中的设置。仅供调试/测试触发使用。</summary>
+    public static void Reload() => Load();
+
     private static void Load()
     {
         try
@@ -331,6 +334,29 @@ public partial class App : Application
         }
 
         Environment.Exit(1);
+    }
+
+    /// <summary>由调试事件主动触发的重启：拉起新实例后退出当前进程（不经过崩溃循环保护）。</summary>
+    internal static void RequestRestart()
+    {
+        try
+        {
+            var exe = Environment.ProcessPath;
+            if (exe is not null)
+            {
+                Process.Start(new ProcessStartInfo(exe)
+                {
+                    UseShellExecute = false,
+                    ArgumentList = { RestartArgument }
+                });
+            }
+        }
+        catch
+        {
+            // 拉不起来就直接退出
+        }
+
+        Environment.Exit(0);
     }
 
     /// <summary>资源文件完整路径。</summary>

@@ -123,6 +123,10 @@ public sealed partial class SettingsWindow : Window
         LoadAnnotationSettings();
         LoadHomeSettings();
         AllowMultiInstanceSwitch.IsOn = AppSettings.AllowMultiInstance;
+
+        // 手动触发事件：填充可用事件列表与自动建议
+        EventListView.ItemsSource = DebugEvents.All;
+        EventNameBox.ItemsSource = DebugEvents.All.Select(e => e.Name).ToList();
     }
 
     /// <summary>按顺序给分组内的二级导航按钮写 Tag（避免在 XAML 里逐个重复修改）。</summary>
@@ -235,6 +239,118 @@ public sealed partial class SettingsWindow : Window
         {
             AppLogger.Warn($"导出日志失败：{ex.Message}");
             await ShowMessageAsync("导出失败", ex.Message);
+        }
+    }
+
+    // ── 手动触发事件 ──
+
+    /// <summary>输入事件名称时，实时显示匹配事件的说明。</summary>
+    private void OnEventNameChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
+    {
+        var name = sender.Text?.Trim() ?? string.Empty;
+        if (name.Length == 0)
+        {
+            EventHintText.Text = string.Empty;
+            return;
+        }
+
+        if (DebugEvents.TryGet(name, out var info))
+        {
+            string danger = info.IsDangerous ? "【危险】" : string.Empty;
+            EventHintText.Text = $"{danger}{info.Category} · {info.Description}";
+        }
+        else
+        {
+            EventHintText.Text = "未找到匹配的事件，可在下方列表或仓库 Wiki 中查询名称。";
+        }
+    }
+
+    /// <summary>触发事件按钮点击。</summary>
+    private async void OnEventTriggerClick(object sender, RoutedEventArgs e)
+        => await TriggerEventAsync();
+
+    /// <summary>AutoSuggestBox 提交（回车）时同样触发事件。</summary>
+    private async void OnEventQuerySubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args)
+        => await TriggerEventAsync();
+
+    /// <summary>触发事件：先二次确认（含风险提示），再执行并展示结果。</summary>
+    private async Task TriggerEventAsync()
+    {
+        var name = EventNameBox.Text?.Trim() ?? string.Empty;
+        if (name.Length == 0)
+        {
+            await ShowMessageAsync("请输入事件名称", "在输入框中键入要触发的事件名称后再点击「触发」。");
+            return;
+        }
+
+        if (!DebugEvents.TryGet(name, out var info))
+        {
+            await ShowMessageAsync("未找到事件",
+                $"不存在名为「{name}」的事件。\n\n可用事件见下方列表，或前往仓库 Wiki 查询：\nhttps://github.com/XingmoStudio/ClassDock/wiki");
+            return;
+        }
+
+        // 二次确认：明确告知直接运行可能造成意想不到的结果，仅适用于复现测试
+        var confirm = new ContentDialog
+        {
+            XamlRoot = Content.XamlRoot,
+            RequestedTheme = AppTheme.CurrentElementTheme,
+            Title = "触发事件？",
+            PrimaryButtonText = "运行",
+            CloseButtonText = "取消",
+            DefaultButton = ContentDialogButton.Close,
+            Content = new StackPanel { Spacing = 8 }
+        };
+        ((StackPanel)confirm.Content).Children.Add(new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap,
+            Text = $"事件：{info.Name}"
+        });
+        ((StackPanel)confirm.Content).Children.Add(new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap,
+            Foreground = new SolidColorBrush(Color.FromArgb(0xFF, 0xE6, 0xA2, 0x3C)),
+            Text = info.Description
+        });
+        if (info.IsDangerous)
+        {
+            ((StackPanel)confirm.Content).Children.Add(new TextBlock
+            {
+                TextWrapping = TextWrapping.Wrap,
+                Foreground = new SolidColorBrush(Color.FromArgb(0xFF, 0xC4, 0x2B, 0x1C)),
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                Text = "此操作属于高风险事件，可能导致数据丢失或应用异常。"
+            });
+        }
+        ((StackPanel)confirm.Content).Children.Add(new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap,
+            Foreground = new SolidColorBrush(Color.FromArgb(0xFF, 0xE6, 0xA2, 0x3C)),
+            Text = "直接运行可能造成意想不到的结果，仅适用于复现测试。"
+        });
+
+        if (await confirm.ShowAsync() != ContentDialogResult.Primary) return;
+
+        try
+        {
+            EventTriggerButton.IsEnabled = false;
+            var result = await DebugEvents.InvokeAsync(name);
+            if (!string.IsNullOrEmpty(result))
+                await ShowMessageAsync("事件已触发", result);
+        }
+        catch (KeyNotFoundException)
+        {
+            await ShowMessageAsync("未找到事件", $"不存在名为「{name}」的事件。");
+        }
+        catch (Exception ex)
+        {
+            // app.throw 等事件会主动抛出，这里展示异常信息但不视为崩溃
+            AppLogger.Warn($"调试事件 {name} 执行时抛出异常：{ex.Message}");
+            await ShowMessageAsync("事件执行异常", ex.Message);
+        }
+        finally
+        {
+            EventTriggerButton.IsEnabled = true;
         }
     }
 

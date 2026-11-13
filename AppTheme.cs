@@ -173,6 +173,9 @@ internal static class AppTheme
         RootThemes.Remove(root);
     }
 
+    /// <summary>重新应用当前主题到所有已接入窗口（调试事件触发用）。</summary>
+    public static void Reapply() => Refresh();
+
     /// <summary>设置明暗主题并持久化。</summary>
     public static void SetMode(AppThemeMode mode)
     {
