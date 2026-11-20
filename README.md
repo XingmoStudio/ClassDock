@@ -125,9 +125,9 @@ ClassDock-{版本}-{变体}\
 
 ## 版本
 
-### V0 **InTheMaking 制作中**
+### V0 **Exploration 开拓**
 
-- [ ] 0.1 PaintingTheWorld 绘世界
+- [ ] 0.1 PaintingTheWorld 绘世
 
 ### V1 **Amphoreus 永恒之地**
 
