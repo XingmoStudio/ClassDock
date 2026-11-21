@@ -101,11 +101,17 @@ internal static class AppSettings
     /// <summary>笔速橡皮（实验）：移动越快橡皮半径越大（有上下限）。</summary>
     public static bool SpeedEraser { get; set; }
 
-    /// <summary>测试与调试页是否已解锁（版本号连点 7 次并确认风险后置为 true）。</summary>
-    public static bool DebugUnlocked { get; set; }
+#if CLASSDOCK_DEBUG
+    private const bool DebugFeaturesEnabledByDefault = true;
+#else
+    private const bool DebugFeaturesEnabledByDefault = false;
+#endif
 
-    /// <summary>测试与调试页是否启用；关闭后侧边栏不再显示，需通过版本号连点重新启用。</summary>
-    public static bool DebugEnabled { get; set; } = true;
+    /// <summary>测试与调试页是否已解锁；Debug 构建默认解锁，其他构建可通过版本号连点解锁。</summary>
+    public static bool DebugUnlocked { get; set; } = DebugFeaturesEnabledByDefault;
+
+    /// <summary>测试与调试页是否启用；Debug 构建默认开启，Release 构建默认关闭。</summary>
+    public static bool DebugEnabled { get; set; } = DebugFeaturesEnabledByDefault;
 
     /// <summary>打开设置窗口时是否默认落在主页。</summary>
     public static bool OpenHomeByDefault { get; set; }
@@ -251,8 +257,8 @@ internal static class AppSettings
         public bool MultiTouchDrawing { get; set; }
         public bool PenTaperCorrection { get; set; } = true;
         public bool SpeedEraser { get; set; }
-        public bool DebugUnlocked { get; set; }
-        public bool DebugEnabled { get; set; } = true;
+        public bool DebugUnlocked { get; set; } = DebugFeaturesEnabledByDefault;
+        public bool DebugEnabled { get; set; } = DebugFeaturesEnabledByDefault;
         public bool OpenHomeByDefault { get; set; }
     }
 }

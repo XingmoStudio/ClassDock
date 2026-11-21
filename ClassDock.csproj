@@ -26,20 +26,16 @@
     <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
     <!-- 使用自定义 Program.cs 入口（非打包应用需要） -->
     <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
-    <!-- 不论 Debug 还是 Release，都输出启动器 + 核心 -->
-    <EnableLauncher>true</EnableLauncher>
+    <!-- Debug / Release 默认都组装“启动器 ClassDock.exe + App-{版本} 核心”。
+         主程序内部 publish 会通过命令行覆盖为 false，避免递归组装。 -->
+    <AssembleVariants>true</AssembleVariants>
+    <!-- 常规编译输出也统一归入 AnyCPU，避免额外生成 bin\Debug / bin\Release。 -->
+    <OutputPath>bin\AnyCPU\$(Configuration)\</OutputPath>
   </PropertyGroup>
 
-  <!-- Debug：开启测试与调试 -->
-  <PropertyGroup Condition="'$(Configuration)'=='Debug'">
-    <DefineConstants>$(DefineConstants);DEBUG;TRACE</DefineConstants>
-    <Optimize>false</Optimize>
-  </PropertyGroup>
-
-  <!-- Release：禁用测试与调试 -->
-  <PropertyGroup Condition="'$(Configuration)'=='Release'">
-    <DefineConstants>$(DefineConstants);TRACE</DefineConstants>
-    <Optimize>true</Optimize>
+  <!-- 供 AppSettings 设置调试功能的编译期默认值；Release 不定义此常量。 -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <DefineConstants>$(DefineConstants);CLASSDOCK_DEBUG</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
@@ -82,7 +78,7 @@
   -->
   <Target Name="AssembleVariants" AfterTargets="Build" Condition="'$(AssembleVariants)' != 'false'">
     <PropertyGroup>
-      <DistRoot>$(MSBuildProjectDirectory)\bin\$(Platform)\$(Configuration)\dist</DistRoot>
+      <DistRoot>$(MSBuildProjectDirectory)\bin\AnyCPU\$(Configuration)\dist</DistRoot>
       <LauncherStage>$(DistRoot)\_launcher</LauncherStage>
     </PropertyGroup>
 

@@ -21,6 +21,8 @@
     <PublishTrimmed>true</PublishTrimmed>
     <InvariantGlobalization>true</InvariantGlobalization>
     <DebugType>embedded</DebugType>
+    <!-- 与主项目共用根目录 AnyCPU 输出，避免 Launcher\bin\Debug / Release。 -->
+    <OutputPath>..\bin\AnyCPU\$(Configuration)\</OutputPath>
   </PropertyGroup>
 
 </Project>
