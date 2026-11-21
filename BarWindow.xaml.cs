@@ -12,7 +12,7 @@ using WinRT.Interop;
 namespace ClassDock;
 
 /// <summary>
-/// 屏幕右缘的小白条：
+/// 屏幕右缘的侧边栏：
 /// - 12 DIP 宽、全屏高的透明热区窗口，置顶、无边框、不激活（WS_EX_NOACTIVATE）
 /// - 白色胶囊握把居中，hover 时 3x32 → 4x40、透明度 0.85 → 1
 /// - 点击切换面板；按住向内拖拽跟手露出面板，松手按阈值吸附
@@ -37,12 +37,17 @@ public sealed partial class BarWindow : Window
     // 屏幕度量（物理像素 / DIP）
     private int _screenWpx, _screenHpx;
     private double _scale = 1;
+    private int _barWpx, _barHpx, _barLeftPx, _barTopPx;
     private int _panelWpx, _panelHpx, _panelTopPx, _spanPx;
     private int _openXpx, _closedXpx;
 
+    private enum DragAxis { None, Horizontal, Vertical }
+
     // 拖拽状态
-    private bool _pressed, _moved, _wasOpen;
+    private bool _pressed, _moved, _wasOpen, _verticalDragArmed;
     private double _startXdip, _lastInwardDip;
+    private DragAxis _dragAxis;
+    private int _startCursorXpx, _startCursorYpx, _startBarTopPx;
 
     // 动画 & 失焦检测
     private DispatcherTimer? _animTimer;
@@ -64,7 +69,7 @@ public sealed partial class BarWindow : Window
         Grip.PointerCaptureLost += OnCaptureLost;
     }
 
-    /// <summary>配置窗口样式：无边框、置顶、禁用系统圆角并设置胶囊区域。</summary>
+    /// <summary>配置窗口样式：无边框、置顶，并使用 DWM 小圆角平滑裁剪。</summary>
     private void SetupWindow()
     {
         WindowMinSize.RemoveLimits(_hwnd);
@@ -82,11 +87,9 @@ public sealed partial class BarWindow : Window
         }
         AppWindow.IsShownInSwitchers = false;
 
-        // 白条形状 = 窗口形状：禁用 DWM 自动圆角（窄窗口会被裁成尖端），
-        // 窗口区域由 Layout 中的 SetCapsuleRegion 设为胶囊（两端半圆）。
-        // 注意：SystemBackdrop 透明画刷与 DwmGlass 玻璃帧都会与 XAML 岛冲突
-        // （崩溃或吞掉内容），已弃用；窗口白底 + 胶囊区域 = 白色胶囊白条。
-        DwmGlass.DisableCornerRounding(_hwnd);
+        // 小圆角由 DWM 平滑裁剪；不再使用会产生硬锯齿的 SetWindowRgn。
+        // 默认圆角半径过大，会把窄白条端部切成尖形，因此使用小圆角。
+        DwmGlass.EnableSmallCornerRounding(_hwnd);
     }
 
     [DllImport("user32.dll")]
@@ -94,6 +97,16 @@ public sealed partial class BarWindow : Window
 
     [DllImport("user32.dll")]
     private static extern int GetSystemMetrics(int nIndex);
+
+    [DllImport("user32.dll")]
+    private static extern bool GetCursorPos(out NativePoint point);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativePoint
+    {
+        public int X;
+        public int Y;
+    }
 
     private const int SmCxScreen = 0;
     private const int SmCyScreen = 1;
@@ -106,15 +119,14 @@ public sealed partial class BarWindow : Window
         _scale = Grip.XamlRoot?.RasterizationScale ?? 1;
         if (_scale <= 0) _scale = 1;
 
-        // 自身：右缘短小胶囊，垂直居中
-        int barWpx = Px(BarWidthDip);
-        int barHpx = Px(BarHeightDip);
-        int barTopPx = (_screenHpx - barHpx) / 2;
-        AppWindow.MoveAndResize(new RectInt32(_screenWpx - BarInsetPx - barWpx, barTopPx, barWpx, barHpx));
-        // 圆角 = 半宽 → 两端半圆胶囊
+        // 自身：右缘短小胶囊，按持久化比例恢复垂直位置。
+        _barWpx = Px(BarWidthDip);
+        _barHpx = Px(BarHeightDip);
+        int verticalRange = Math.Max(0, _screenHpx - _barHpx);
+        _barTopPx = Math.Clamp((int)Math.Round(verticalRange * AppSettings.BarVerticalRatio), 0, verticalRange);
+        _barLeftPx = _screenWpx - BarInsetPx - _barWpx;
+        AppWindow.MoveAndResize(new RectInt32(_barLeftPx, _barTopPx, _barWpx, _barHpx));
         Grip.CornerRadius = new CornerRadius(BarWidthDip / 2);
-        // 窗口区域设为胶囊（两端半圆），DWM 不再叠加自动圆角
-        DwmGlass.SetCapsuleRegion(_hwnd, barWpx, barHpx);
 
         // 面板：高 = 屏幕高 25%，宽 = 高 x √2
         double panelHdip = _screenHpx / _scale * 0.25;
@@ -162,15 +174,42 @@ public sealed partial class BarWindow : Window
         _pressed = true;
         _moved = false;
         _wasOpen = _panel is { IsOpen: true };
+        _verticalDragArmed = AppSettings.BarVerticalDragEnabled;
+        _dragAxis = DragAxis.None;
         _startXdip = e.GetCurrentPoint(Grip).Position.X;
         _lastInwardDip = 0;
+        _startBarTopPx = _barTopPx;
+        GetCursorPos(out var cursor);
+        _startCursorXpx = cursor.X;
+        _startCursorYpx = cursor.Y;
         Grip.CapturePointer(e.Pointer);
     }
 
-    /// <summary>指针移动：超过死区后跟手拖拽面板。</summary>
+    /// <summary>指针移动：按主导方向调整白条位置或跟手拖拽面板。</summary>
     private void OnPointerMoved(object sender, PointerRoutedEventArgs e)
     {
-        if (!_pressed || _panel is null) return;
+        if (!_pressed) return;
+
+        // 开关开启时，第一次越过死区即锁定主轴，避免垂直调整误触面板。
+        if (_verticalDragArmed && _dragAxis == DragAxis.None)
+        {
+            GetCursorPos(out var cursor);
+            int dx = cursor.X - _startCursorXpx;
+            int dy = cursor.Y - _startCursorYpx;
+            int deadzonePx = Math.Max(1, Px(DeadzoneDip));
+            if (Math.Abs(dx) <= deadzonePx && Math.Abs(dy) <= deadzonePx) return;
+            _dragAxis = Math.Abs(dy) > Math.Abs(dx) ? DragAxis.Vertical : DragAxis.Horizontal;
+        }
+
+        if (_dragAxis == DragAxis.Vertical)
+        {
+            GetCursorPos(out var cursor);
+            _moved = true;
+            MoveBarVertical(_startBarTopPx + cursor.Y - _startCursorYpx);
+            return;
+        }
+
+        if (_panel is null) return;
         double inward = _startXdip - e.GetCurrentPoint(Grip).Position.X; // 向左(内)为正
         if (!_moved && Math.Abs(inward) <= DeadzoneDip) return;
 
@@ -192,14 +231,25 @@ public sealed partial class BarWindow : Window
             new PointInt32(_screenWpx - (int)Math.Round(offsetPx), _panelTopPx));
     }
 
-    /// <summary>指针抬起：根据拖拽距离和方向决定吸附状态。</summary>
+    /// <summary>指针抬起：保存垂直位置，或按水平拖拽距离和方向决定面板吸附状态。</summary>
     private void OnPointerReleased(object sender, PointerRoutedEventArgs e)
     {
         if (!_pressed) return;
+        bool moved = _moved;
+        var dragAxis = _dragAxis;
         _pressed = false;
+        _moved = false;
+        _dragAxis = DragAxis.None;
+        _verticalDragArmed = false;
         Grip.ReleasePointerCapture(e.Pointer);
 
-        if (!_moved)
+        if (dragAxis == DragAxis.Vertical)
+        {
+            SaveBarVerticalPosition();
+            return;
+        }
+
+        if (!moved)
         {
             TogglePanel();
             return;
@@ -217,8 +267,33 @@ public sealed partial class BarWindow : Window
         }
     }
 
-    /// <summary>指针捕获丢失：重置按下状态。</summary>
-    private void OnCaptureLost(object sender, PointerRoutedEventArgs e) => _pressed = false;
+    /// <summary>指针捕获丢失：取消未完成的垂直拖动并复位。</summary>
+    private void OnCaptureLost(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_pressed) return;
+        if (_dragAxis == DragAxis.Vertical) MoveBarVertical(_startBarTopPx);
+        _pressed = false;
+        _moved = false;
+        _dragAxis = DragAxis.None;
+        _verticalDragArmed = false;
+    }
+
+    /// <summary>移动可见侧边栏并夹紧到当前屏幕的垂直可容纳范围。</summary>
+    private void MoveBarVertical(int topPx)
+    {
+        int verticalRange = Math.Max(0, _screenHpx - _barHpx);
+        _barTopPx = Math.Clamp(topPx, 0, verticalRange);
+        AppWindow.Move(new PointInt32(_barLeftPx, _barTopPx));
+    }
+
+    /// <summary>将当前位置保存为可移动行程比例，适配重启后的分辨率与 DPI 变化。</summary>
+    private void SaveBarVerticalPosition()
+    {
+        int verticalRange = Math.Max(0, _screenHpx - _barHpx);
+        if (verticalRange <= 0) return;
+        AppSettings.BarVerticalRatio = Math.Clamp((double)_barTopPx / verticalRange, 0, 1);
+        AppSettings.Save();
+    }
 
     // ── 面板开关（带缓动动画） ──
 

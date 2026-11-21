@@ -686,6 +686,14 @@ public sealed partial class SettingsWindow : Window
         AppSettings.Save();
     }
 
+    /// <summary>允许拖动侧边栏：保存开关，在下次按下时生效。</summary>
+    private void OnBarVerticalDragToggled(object sender, RoutedEventArgs e)
+    {
+        if (_loadingAppearance) return;
+        AppSettings.BarVerticalDragEnabled = BarVerticalDragSwitch.IsOn;
+        AppSettings.Save();
+    }
+
     private void OnInteractionModeChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_loadingSettings) return;
@@ -728,7 +736,7 @@ public sealed partial class SettingsWindow : Window
         AppSettings.Save();
     }
 
-    /// <summary>按当前设置初始化外观与动画页的主题控件。</summary>
+    /// <summary>按当前设置初始化外观页的主题控件。</summary>
     private void LoadAppearanceSettings()
     {
         _loadingAppearance = true;
@@ -742,6 +750,7 @@ public sealed partial class SettingsWindow : Window
         CustomAccentRow.Visibility = AppSettings.AccentSource == AccentSourceMode.Custom
             ? Visibility.Visible
             : Visibility.Collapsed;
+        BarVerticalDragSwitch.IsOn = AppSettings.BarVerticalDragEnabled;
         _loadingAppearance = false;
         UpdateAccentVisuals();
     }

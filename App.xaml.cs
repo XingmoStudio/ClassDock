@@ -74,6 +74,12 @@ internal static class AppSettings
     /// <summary>界面动画级别。</summary>
     public static AnimationLevel AnimationLevel { get; set; } = AnimationLevel.Standard;
 
+    /// <summary>是否允许按住侧边栏上下拖动调整位置。</summary>
+    public static bool BarVerticalDragEnabled { get; set; }
+
+    /// <summary>侧边栏在屏幕可移动行程中的垂直位置比例（0=顶部，1=底部）。</summary>
+    public static double BarVerticalRatio { get; set; } = 0.5;
+
     /// <summary>批注交互模式。</summary>
     public static AnnotationInteractionMode InteractionMode { get; set; } = AnnotationInteractionMode.Desktop;
 
@@ -171,6 +177,10 @@ internal static class AppSettings
                 // 强制不透明，避免历史/手改数据带来透明强调色
                 CustomAccentArgb = unchecked(model.CustomAccentArgb | (int)0xFF000000);
                 AnimationLevel = Enum.IsDefined(model.AnimationLevel) ? model.AnimationLevel : AnimationLevel.Standard;
+                BarVerticalDragEnabled = model.BarVerticalDragEnabled;
+                BarVerticalRatio = double.IsFinite(model.BarVerticalRatio)
+                    ? Math.Clamp(model.BarVerticalRatio, 0, 1)
+                    : 0.5;
                 InteractionMode = Enum.IsDefined(model.InteractionMode) ? model.InteractionMode : AnnotationInteractionMode.Desktop;
                 RememberPenColor = model.RememberPenColor;
                 LastPenColorArgb = unchecked(model.LastPenColorArgb | (int)0xFF000000);
@@ -204,6 +214,8 @@ internal static class AppSettings
                     AccentSource = AccentSource,
                     CustomAccentArgb = CustomAccentArgb,
                     AnimationLevel = AnimationLevel,
+                    BarVerticalDragEnabled = BarVerticalDragEnabled,
+                    BarVerticalRatio = BarVerticalRatio,
                     InteractionMode = InteractionMode,
                     RememberPenColor = RememberPenColor,
                     LastPenColorArgb = LastPenColorArgb,
@@ -230,6 +242,8 @@ internal static class AppSettings
         public AccentSourceMode AccentSource { get; set; } = AccentSourceMode.System;
         public int CustomAccentArgb { get; set; } = unchecked((int)0xFF0078D4);
         public AnimationLevel AnimationLevel { get; set; } = AnimationLevel.Standard;
+        public bool BarVerticalDragEnabled { get; set; }
+        public double BarVerticalRatio { get; set; } = 0.5;
         public AnnotationInteractionMode InteractionMode { get; set; } = AnnotationInteractionMode.Desktop;
         public bool RememberPenColor { get; set; } = true;
         public int LastPenColorArgb { get; set; } = unchecked((int)0xFFE81123);
@@ -709,7 +723,7 @@ public partial class App : Application
             return;
         }
 
-        // 入口窗口：右缘小白条（面板由它按需创建与显示）
+        // 入口窗口：右缘侧边栏（面板由它按需创建与显示）
         _barWindow = new BarWindow();
         _barWindow.Activate();
     }

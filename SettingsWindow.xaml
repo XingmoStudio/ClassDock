@@ -259,7 +259,7 @@
                                             Grid.Column="2"
                                             Margin="12,0,0,0"
                                             VerticalAlignment="Center"
-                                            Text="外观与动画" />
+                                            Text="外观" />
                                     </Grid>
                                 </Button>
                                 <Button
@@ -1012,14 +1012,14 @@
                     </StackPanel>
                 </ScrollViewer>
 
-                <!-- 通用 · 外观与动画 -->
+                <!-- 通用 · 外观 -->
                 <ScrollViewer x:Name="AppearancePage" Visibility="Collapsed">
                     <StackPanel Padding="28,12,28,28" Spacing="16">
 
                         <TextBlock
                             FontSize="22"
                             FontWeight="SemiBold"
-                            Text="外观与动画" />
+                            Text="外观" />
 
                         <TextBlock
                             FontSize="13"
@@ -1163,6 +1163,42 @@
                                         <ComboBoxItem Tag="Standard" Content="标准" />
                                         <ComboBoxItem Tag="None" Content="无" />
                                     </ComboBox>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <Border
+                            Background="{ThemeResource AppCardBackgroundBrush}"
+                            BorderBrush="{ThemeResource AppCardBorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="16,14,16,16">
+                            <StackPanel Spacing="4">
+                                <TextBlock
+                                    FontSize="14"
+                                    FontWeight="SemiBold"
+                                    Text="侧边栏" />
+
+                                <Grid Margin="0,10,0,0" ColumnDefinitions="*,Auto">
+                                    <StackPanel Spacing="4">
+                                        <TextBlock
+                                            VerticalAlignment="Center"
+                                            FontSize="13"
+                                            Text="允许拖动侧边栏" />
+                                        <TextBlock
+                                            FontSize="12"
+                                            Foreground="{ThemeResource AppSecondaryTextBrush}"
+                                            TextWrapping="Wrap"
+                                            Text="开启后可上下拖动调整位置，左右拖动仍用于展开或收起侧边栏。" />
+                                    </StackPanel>
+                                    <ToggleSwitch
+                                        x:Name="BarVerticalDragSwitch"
+                                        Grid.Column="1"
+                                        Margin="0,0,-12,0"
+                                        VerticalAlignment="Center"
+                                        OffContent=""
+                                        OnContent=""
+                                        Toggled="OnBarVerticalDragToggled" />
                                 </Grid>
                             </StackPanel>
                         </Border>
@@ -1777,7 +1813,7 @@
                                                 <TextBlock
                                                     FontSize="14"
                                                     FontWeight="SemiBold"
-                                                    Text="外观与动画" />
+                                                    Text="外观" />
                                                 <TextBlock
                                                     FontSize="12"
                                                     Foreground="{ThemeResource AppSecondaryTextBrush}"

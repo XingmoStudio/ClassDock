@@ -26,6 +26,20 @@
     <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
     <!-- 使用自定义 Program.cs 入口（非打包应用需要） -->
     <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
+    <!-- 不论 Debug 还是 Release，都输出启动器 + 核心 -->
+    <EnableLauncher>true</EnableLauncher>
+  </PropertyGroup>
+
+  <!-- Debug：开启测试与调试 -->
+  <PropertyGroup Condition="'$(Configuration)'=='Debug'">
+    <DefineConstants>$(DefineConstants);DEBUG;TRACE</DefineConstants>
+    <Optimize>false</Optimize>
+  </PropertyGroup>
+
+  <!-- Release：禁用测试与调试 -->
+  <PropertyGroup Condition="'$(Configuration)'=='Release'">
+    <DefineConstants>$(DefineConstants);TRACE</DefineConstants>
+    <Optimize>true</Optimize>
   </PropertyGroup>
 
   <ItemGroup>

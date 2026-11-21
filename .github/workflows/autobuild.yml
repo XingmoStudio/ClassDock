@@ -1,4 +1,4 @@
-name: ClassDock Nightly
+name: ClassDock AutoBuild
 
 on:
   push:
@@ -22,7 +22,7 @@ env:
   PLATFORM: x64
 
 jobs:
-  nightly:
+  AutoBuild:
     runs-on: windows-latest
     env:
       # 手动触发时带上通道输入；push 触发时为空，改从提交信息里解析。
@@ -248,30 +248,30 @@ jobs:
           git log -1 --pretty=%B >> $env:GITHUB_ENV
           echo "EOF" >> $env:GITHUB_ENV
 
-      - name: Delete old nightly release
+      - name: Delete old AutoBuild release
         shell: pwsh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # tag 与包名不带通道标识：所有通道共用 rolling 的 nightly Release，
+          # tag 与包名不带通道标识：所有通道共用 rolling 的 AutoBuild Release，
           # 每次发布先删旧 Release 再建新的，避免同名附件冲突。
-          $releaseId = gh release view nightly --json id -q .id 2>$null
+          $releaseId = gh release view AutoBuild --json id -q .id 2>$null
 
           if ($releaseId) {
-            Write-Host "发现旧的 Nightly Release，正在删除..."
-            gh release delete nightly --yes
+            Write-Host "发现旧的 AutoBuild Release，正在删除..."
+            gh release delete AutoBuild --yes
           } else {
-            Write-Host "未发现旧的 Nightly Release，跳过删除步骤。"
+            Write-Host "未发现旧的 AutoBuild Release，跳过删除步骤。"
           }
 
           # 强制返回成功状态码，防止 gh 命令的报错导致整个 Step 失败
           exit 0
 
-      - name: Create nightly release
+      - name: Create AutoBuild release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: nightly
-          name: ClassDock Nightly
+          tag_name: AutoBuild
+          name: ClassDock AutoBuild
           prerelease: ${{ env.CHANNEL_PRERELEASE == 'true' }}
           generate_release_notes: false
           body: |
