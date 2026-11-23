@@ -1599,7 +1599,7 @@
                                         <TextBlock
                                             VerticalAlignment="Center"
                                             FontSize="13"
-                                            Text="多指绘图（实验）" />
+                                            Text="多指绘图（未制作）" />
                                         <TextBlock
                                             FontSize="12"
                                             Foreground="{ThemeResource AppSecondaryTextBrush}"
