@@ -395,7 +395,7 @@
                                             Grid.Column="2"
                                             Margin="12,0,0,0"
                                             VerticalAlignment="Center"
-                                            Text="批注设置" />
+                                            Text="批注" />
                                     </Grid>
                                 </Button>
                                 <Button
@@ -1484,14 +1484,14 @@
                     </StackPanel>
                 </ScrollViewer>
 
-                <!-- 小工具 · 批注设置 -->
+                <!-- 小工具 · 批注 -->
                 <ScrollViewer x:Name="AnnotationPage" Visibility="Collapsed">
                     <StackPanel Padding="28,12,28,28" Spacing="16">
 
                         <TextBlock
                             FontSize="22"
                             FontWeight="SemiBold"
-                            Text="批注设置" />
+                            Text="批注" />
 
                         <TextBlock
                             FontSize="13"
@@ -1521,7 +1521,8 @@
                                             FontSize="12"
                                             Foreground="{ThemeResource AppSecondaryTextBrush}"
                                             TextWrapping="Wrap"
-                                            Text="桌面交互模式只让鼠标和触控笔落笔；屏幕触控模式允许手指直接书写。" />
+                                            Text="桌面交互模式：适用于个人电脑、平板及鼠标操控的屏幕，兼顾鼠标、触控笔、数位板和触摸操作。
+                                            大屏触摸模式：适用于触摸大屏，直接在触控大屏上书写和操作。" />
                                     </StackPanel>
                                     <ComboBox
                                         x:Name="InteractionModeCombo"
@@ -1530,7 +1531,7 @@
                                         VerticalAlignment="Top"
                                         SelectionChanged="OnInteractionModeChanged">
                                         <ComboBoxItem Tag="Desktop" Content="桌面交互模式" />
-                                        <ComboBoxItem Tag="Touch" Content="屏幕触控模式" />
+                                        <ComboBoxItem Tag="Touch" Content="大屏触摸模式" />
                                     </ComboBox>
                                 </Grid>
 
@@ -1599,21 +1600,46 @@
                                         <TextBlock
                                             VerticalAlignment="Center"
                                             FontSize="13"
-                                            Text="多指绘图（未制作）" />
+                                            Text="多指绘图" />
                                         <TextBlock
                                             FontSize="12"
                                             Foreground="{ThemeResource AppSecondaryTextBrush}"
                                             TextWrapping="Wrap"
-                                            Text="需要触屏设备，暂不可用。" />
+                                            Text="需要触屏设备,请确保自身设备支持多点触控功能。" />
                                     </StackPanel>
                                     <ToggleSwitch
                                         x:Name="MultiTouchSwitch"
                                         Grid.Column="1"
                                         Margin="0,0,-12,0"
                                         VerticalAlignment="Center"
-                                        IsEnabled="False"
+                                        Toggled="OnMultiTouchToggled"
                                         OffContent=""
                                         OnContent="" />
+                                </Grid>
+
+                                <Grid Margin="0,14,0,0" ColumnDefinitions="*,Auto">
+                                    <StackPanel Spacing="4">
+                                        <TextBlock
+                                            VerticalAlignment="Center"
+                                            FontSize="13"
+                                            Text="掌压过滤" />
+                                        <TextBlock
+                                            FontSize="12"
+                                            Foreground="{ThemeResource AppSecondaryTextBrush}"
+                                            TextWrapping="Wrap"
+                                            Text="触屏设备上手掌接触面积明显大于指尖，超过阈值时忽略该触点，避免误画。仅对触屏生效。" />
+                                    </StackPanel>
+                                    <ComboBox
+                                        x:Name="PalmRejectionCombo"
+                                        Grid.Column="1"
+                                        MinWidth="150"
+                                        VerticalAlignment="Top"
+                                        SelectionChanged="OnPalmRejectionChanged">
+                                        <ComboBoxItem Tag="0" Content="关闭" />
+                                        <ComboBoxItem Tag="35" Content="严格" />
+                                        <ComboBoxItem Tag="45" Content="标准" />
+                                        <ComboBoxItem Tag="65" Content="宽松" />
+                                    </ComboBox>
                                 </Grid>
 
                                 <Grid Margin="0,14,0,0" ColumnDefinitions="*,Auto">
@@ -1887,7 +1913,7 @@
                                                 <TextBlock
                                                     FontSize="14"
                                                     FontWeight="SemiBold"
-                                                    Text="批注设置" />
+                                                    Text="批注" />
                                                 <TextBlock
                                                     FontSize="12"
                                                     Foreground="{ThemeResource AppSecondaryTextBrush}"

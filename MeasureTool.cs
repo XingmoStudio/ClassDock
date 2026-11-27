@@ -81,6 +81,9 @@ internal abstract class MeasureTool
     /// <summary>是否正在拖动可旋转射线（量角器）。</summary>
     public bool RayDragging { get; protected set; }
 
+    /// <summary>当前手势所属的指针 ID（0 表示无手势），用于拒绝第二根手指干扰。</summary>
+    public uint GesturePointerId { get; protected set; }
+
     /// <summary>是否有手势正在进行（窗口据此决定是否接管指针事件）。</summary>
     public bool IsBusy => Gesture != MeasureGesture.None || RayDragging;
 
@@ -225,6 +228,7 @@ internal abstract class MeasureTool
     {
         Gesture = MeasureGesture.None;
         RayDragging = false;
+        GesturePointerId = 0;
     }
 
     /// <summary>拖动可旋转射线（量角器覆盖，其余量具无此交互）。</summary>
@@ -287,7 +291,10 @@ internal abstract class MeasureTool
         if (SnapPassThrough?.Invoke(p) == true) return;
 
         e.Handled = true;
+        // 已有手势在进行：吞掉第二根手指的按下，避免互相抢拖动或误落笔
+        if (IsBusy) return;
         BringToFront();
+        GesturePointerId = e.Pointer.PointerId;
         BeginDrag(p);
         Layer.CapturePointer(e.Pointer);
     }
@@ -307,7 +314,9 @@ internal abstract class MeasureTool
     protected void OnRotatePressed(object sender, PointerRoutedEventArgs e)
     {
         e.Handled = true;
+        if (IsBusy) return;
         BringToFront();
+        GesturePointerId = e.Pointer.PointerId;
         BeginRotate(e.GetCurrentPoint(Layer).Position);
         Layer.CapturePointer(e.Pointer);
     }
@@ -315,7 +324,9 @@ internal abstract class MeasureTool
     protected void OnResizePressed(object sender, PointerRoutedEventArgs e)
     {
         e.Handled = true;
+        if (IsBusy) return;
         BringToFront();
+        GesturePointerId = e.Pointer.PointerId;
         BeginResize(e.GetCurrentPoint(Layer).Position);
         Layer.CapturePointer(e.Pointer);
     }

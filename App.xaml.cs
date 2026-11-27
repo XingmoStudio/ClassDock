@@ -36,9 +36,10 @@ public enum AnimationLevel
 /// <summary>批注交互模式。</summary>
 public enum AnnotationInteractionMode
 {
-    /// <summary>桌面交互模式：鼠标/触控笔绘制，手指触控不落笔，避免误触。</summary>
+    /// <summary>桌面交互模式：鼠标/触控笔绘制，手指默认不落笔以免误触；
+    /// 开启「多指绘图」后手指也可同时绘制，但只提供较简单的多指能力。</summary>
     Desktop,
-    /// <summary>屏幕触控模式：手指触控也可以直接绘制（适合触摸大屏）。</summary>
+    /// <summary>大屏触摸模式：手指触控也可以直接绘制（适合触摸大屏）。</summary>
     Touch
 }
 
@@ -94,6 +95,9 @@ internal static class AppSettings
 
     /// <summary>多指绘图（实验）：多根手指可同时各画一条笔迹。</summary>
     public static bool MultiTouchDrawing { get; set; }
+
+    /// <summary>掌压过滤阈值（DIP）：触点最大边长超过该值视为手掌并忽略，0 表示关闭。</summary>
+    public static double PalmRejectionThreshold { get; set; } = 45;
 
     /// <summary>抬笔时笔锋修正：软笔收笔时做平滑与出锋。</summary>
     public static bool PenTaperCorrection { get; set; } = true;
@@ -192,6 +196,9 @@ internal static class AppSettings
                 LastPenColorArgb = unchecked(model.LastPenColorArgb | (int)0xFF000000);
                 SampleRate = Enum.IsDefined(model.SampleRate) ? model.SampleRate : AnnotationSampleRate.Default;
                 MultiTouchDrawing = model.MultiTouchDrawing;
+                PalmRejectionThreshold = model.PalmRejectionThreshold is >= 0 and <= 200
+                    ? model.PalmRejectionThreshold
+                    : 45;
                 PenTaperCorrection = model.PenTaperCorrection;
                 SpeedEraser = model.SpeedEraser;
                 DebugUnlocked = model.DebugUnlocked;
@@ -227,6 +234,7 @@ internal static class AppSettings
                     LastPenColorArgb = LastPenColorArgb,
                     SampleRate = SampleRate,
                     MultiTouchDrawing = MultiTouchDrawing,
+                    PalmRejectionThreshold = PalmRejectionThreshold,
                     PenTaperCorrection = PenTaperCorrection,
                     SpeedEraser = SpeedEraser,
                     DebugUnlocked = DebugUnlocked,
@@ -255,6 +263,7 @@ internal static class AppSettings
         public int LastPenColorArgb { get; set; } = unchecked((int)0xFFE81123);
         public AnnotationSampleRate SampleRate { get; set; } = AnnotationSampleRate.Default;
         public bool MultiTouchDrawing { get; set; }
+        public double PalmRejectionThreshold { get; set; } = 45;
         public bool PenTaperCorrection { get; set; } = true;
         public bool SpeedEraser { get; set; }
         public bool DebugUnlocked { get; set; } = DebugFeaturesEnabledByDefault;

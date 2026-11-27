@@ -284,9 +284,12 @@ internal sealed class ProtractorTool : MeasureTool
     private void OnHandlePressed(object sender, PointerRoutedEventArgs e)
     {
         e.Handled = true;
+        // 已有手势/射线拖动在进行：忽略第二根手指
+        if (IsBusy) return;
         BringToFront();
         var p = e.GetCurrentPoint(Layer).Position;
         _rayGrabOffset = _rayAngleRaw - LocalRayAngle(p);
+        GesturePointerId = e.Pointer.PointerId;
         RayDragging = true;
         Layer.CapturePointer(e.Pointer);
     }

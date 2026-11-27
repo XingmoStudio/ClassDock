@@ -878,7 +878,7 @@
         </Border>
 
         <!-- 橡皮贴图：跟随指针移动，压在最上层，不参与命中测试 -->
-        <Canvas IsHitTestVisible="False">
+        <Canvas x:Name="EraserLayer" IsHitTestVisible="False">
             <Image
                 x:Name="EraserImage"
                 Width="40"

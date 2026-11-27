@@ -639,7 +639,7 @@ public sealed partial class SettingsWindow : Window
         _loadingSettings = false;
     }
 
-    /// <summary>批注设置页：交互模式、笔色记忆、采样率与两个实验项。</summary>
+    /// <summary>批注页：交互模式、笔色记忆、采样率与两个实验项。</summary>
     private void LoadAnnotationSettings()
     {
         _loadingSettings = true;
@@ -651,8 +651,14 @@ public sealed partial class SettingsWindow : Window
             AnnotationSampleRate.Low => 2,
             _ => 1
         };
-        // 多指绘图暂不可用：开关固定关闭并置灰
-        MultiTouchSwitch.IsOn = false;
+        MultiTouchSwitch.IsOn = AppSettings.MultiTouchDrawing;
+        PalmRejectionCombo.SelectedIndex = AppSettings.PalmRejectionThreshold switch
+        {
+            <= 0 => 0,      // 关闭
+            <= 38 => 1,     // 严格
+            <= 55 => 2,     // 标准
+            _ => 3          // 宽松
+        };
         PenTaperSwitch.IsOn = AppSettings.PenTaperCorrection;
         SpeedEraserSwitch.IsOn = AppSettings.SpeedEraser;
 
@@ -718,6 +724,26 @@ public sealed partial class SettingsWindow : Window
             "High" => AnnotationSampleRate.High,
             "Low" => AnnotationSampleRate.Low,
             _ => AnnotationSampleRate.Default
+        };
+        AppSettings.Save();
+    }
+
+    private void OnMultiTouchToggled(object sender, RoutedEventArgs e)
+    {
+        if (_loadingSettings) return;
+        AppSettings.MultiTouchDrawing = MultiTouchSwitch.IsOn;
+        AppSettings.Save();
+    }
+
+    private void OnPalmRejectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loadingSettings) return;
+        AppSettings.PalmRejectionThreshold = ((PalmRejectionCombo.SelectedItem as ComboBoxItem)?.Tag as string) switch
+        {
+            "0" => 0,
+            "35" => 35,
+            "65" => 65,
+            _ => 45
         };
         AppSettings.Save();
     }

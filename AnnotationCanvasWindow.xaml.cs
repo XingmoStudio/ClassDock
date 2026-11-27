@@ -97,27 +97,48 @@ public sealed partial class AnnotationCanvasWindow : Window
     private readonly Stack<EditAction> _undo = [];
     private readonly Stack<EditAction> _redo = [];
 
-    /// <summary>本次橡皮拖动中被整体移除的原笔迹（撤销时还原）。</summary>
-    private readonly List<InkStroke> _eraseRemoved = [];
+    // 每根指针一个独立绘制会话：绘制/擦除/图形状态都挂在会话上，互不干扰
+    private readonly Dictionary<uint, PointerSession> _sessions = [];
 
-    /// <summary>本次橡皮拖动中切割出的最终片段（撤销时移除）。</summary>
-    private readonly List<InkStroke> _eraseFragments = [];
-    // 被擦笔迹/切出片段各自在 _strokes 中的原始下标，撤销重做时按原位恢复层级
-    private readonly Dictionary<InkStroke, int> _eraseRemovedIndex = [];
-    private readonly Dictionary<InkStroke, int> _eraseFragmentIndex = [];
+    /// <summary>每根擦除指针各自的橡皮贴图：多指擦除时互不影响，各自跟随自己的手指。</summary>
+    private readonly Dictionary<PointerSession, Image> _eraserGhosts = [];
 
-    // 当前绘制状态
-    private InkStroke? _current;        // 正在绘制的笔迹
-    private InkStroke? _shapeDraft;     // 几何图形预览草稿（松手时提交或丢弃）
-    private Point _shapeStart;          // 图形起始点
-    private AnnotationTool _tool = AnnotationTool.Pen; // 当前选中工具
-    private bool _erasing;              // 橡皮拖动中
-    private uint _activePointerId;      // 活动指针 ID，过滤其它指针的事件
+    /// <summary>等待按帧重建轮廓的软笔笔迹：同一帧内多次追加只重建一次，避免多指并发时每点全量重算。</summary>
+    private readonly HashSet<InkStroke> _softDirty = [];
+    private bool _softRenderHooked;
 
-    // 笔速橡皮（实验）：擦除半径随指针移动速度动态变化（有上下限）
-    private double _eraseRadiusEffective = 12;
-    private Point _eraseLastPoint;
-    private long _eraseLastTimestamp;
+    // 当前选中工具（会话创建时快照到 PointerSession.Tool）
+    private AnnotationTool _tool = AnnotationTool.Pen;
+
+    /// <summary>一根指针的独立绘制会话。原先全局单例的绘制状态按 PointerId 拆到这里，
+    /// 为多指并发打底；P1 阶段仍只允许一根指针绘制，行为与改造前一致。</summary>
+    private sealed class PointerSession
+    {
+        public required uint PointerId { get; init; }
+        public required AnnotationTool Tool { get; init; }
+
+        public InkStroke? Current;       // 正在绘制的笔迹
+        public InkStroke? ShapeDraft;    // 几何图形/贴边直线预览草稿
+        public Point ShapeStart;         // 图形起始点
+
+        // 贴边画直线：吸附边几何随会话保存，多指时不互相覆盖
+        public bool SnapActive;
+        public Point SnapStart;
+        public Point SnapEdgeStart;
+        public Point SnapEdgeDir;
+        public double SnapEdgeLen;
+        public Point SnapOutward;
+
+        // 橡皮拖动状态（含笔速橡皮）
+        public bool Erasing;
+        public double EraseRadiusEffective = 12;
+        public Point EraseLastPoint;
+        public long EraseLastTimestamp;
+        public readonly List<InkStroke> EraseRemoved = [];
+        public readonly List<InkStroke> EraseFragments = [];
+        public readonly Dictionary<InkStroke, int> EraseRemovedIndex = [];
+        public readonly Dictionary<InkStroke, int> EraseFragmentIndex = [];
+    }
 
     // 画笔参数
     private Color _penColor = PenColor;
@@ -142,6 +163,9 @@ public sealed partial class AnnotationCanvasWindow : Window
 
         /// <summary>图形类型；普通笔迹为 None。虚线类图形擦断后的片段靠它保持虚线样式。</summary>
         public ShapeKind Shape { get; init; } = ShapeKind.None;
+
+        // 采样点包围盒：橡皮命中时先按它快速剔除，避免多指并发时逐点判定所有笔迹
+        public double MinX, MinY, MaxX, MaxY;
     }
 
     /// <summary>一次可撤销的编辑，撤销与重做各自维护画布状态。</summary>
@@ -205,6 +229,7 @@ public sealed partial class AnnotationCanvasWindow : Window
         {
             AppTheme.Changed -= OnAppThemeChanged;
             AppTheme.Unapply(Root);
+            if (_softRenderHooked) Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnSoftInkRender;
             if (AppSettings.RememberPenColor) AppSettings.Save();
         };
         UpdateThicknessVisuals();
@@ -228,28 +253,48 @@ public sealed partial class AnnotationCanvasWindow : Window
     // ── 橡皮贴图：跟随指针移动，压在最上层，不参与命中测试；只在绘制区域显示 ──
 
     /// <summary>橡皮贴图边长随擦除半径缩放，让擦除范围可见（笔速橡皮时跟随实时半径）。</summary>
-    private double EraserVisualSize => Math.Max(24, (_erasing ? _eraseRadiusEffective : _eraserRadius) * 2 + 8);
+    private double EraserVisualSize(PointerSession? session)
+        => Math.Max(24, (session is { Erasing: true } ? session.EraseRadiusEffective : _eraserRadius) * 2 + 8);
 
     /// <summary>橡皮工具下让贴图跟随指针（贴图中心对齐指针，避免偏移造成擦除手感偏差）。
-    /// 指针移到笔设置栏或工具栏时收起，绘制区域之外不显示橡皮。</summary>
-    private void UpdateEraserVisual(Point position, object? source)
+    /// 每根擦除指针使用自己的贴图；指针移到笔设置栏或工具栏时收起。</summary>
+    private void UpdateEraserVisual(Point position, object? source, PointerSession? session = null)
     {
         if (_tool != AnnotationTool.Eraser || IsOverUiPanel(source))
         {
-            HideEraserVisual();
+            HideEraserVisual(session);
             return;
         }
 
-        double size = EraserVisualSize;
-        EraserImage.Width = size;
-        EraserImage.Height = size;
-        Canvas.SetLeft(EraserImage, position.X - size / 2);
-        Canvas.SetTop(EraserImage, position.Y - size / 2);
-        EraserImage.Visibility = Visibility.Visible;
+        double size = EraserVisualSize(session);
+        var image = session is null ? EraserImage : GetEraserGhost(session);
+        image.Width = size;
+        image.Height = size;
+        Canvas.SetLeft(image, position.X - size / 2);
+        Canvas.SetTop(image, position.Y - size / 2);
+        image.Visibility = Visibility.Visible;
     }
 
-    /// <summary>隐藏橡皮擦贴图。</summary>
-    private void HideEraserVisual() => EraserImage.Visibility = Visibility.Collapsed;
+    /// <summary>取某根擦除指针的贴图，首次使用时创建。</summary>
+    private Image GetEraserGhost(PointerSession session)
+    {
+        if (_eraserGhosts.TryGetValue(session, out var ghost)) return ghost;
+        ghost = new Image { Source = EraserImage.Source, IsHitTestVisible = false };
+        _eraserGhosts[session] = ghost;
+        EraserLayer.Children.Add(ghost);
+        return ghost;
+    }
+
+    /// <summary>隐藏橡皮擦贴图；传入会话时只移除该指针自己的贴图。</summary>
+    private void HideEraserVisual(PointerSession? session = null)
+    {
+        if (session is not null)
+        {
+            if (_eraserGhosts.Remove(session, out var ghost)) EraserLayer.Children.Remove(ghost);
+            return;
+        }
+        EraserImage.Visibility = Visibility.Collapsed;
+    }
 
     /// <summary>沿可视树向上找命名容器，判断指针是否落在笔设置栏 / 工具栏上。</summary>
     private static bool IsOverUiPanel(object? source)
@@ -305,7 +350,7 @@ public sealed partial class AnnotationCanvasWindow : Window
             else if (tool == AnnotationTool.Ruler) ToggleToolPanel();
             return;
         }
-        FinishStroke();
+        FinishAllSessions();
         _tool = tool;
         HideEraserVisual();
         // 切走对应工具时收起它的设置面板
@@ -490,23 +535,29 @@ public sealed partial class AnnotationCanvasWindow : Window
     private double _rulerAngle;       // 当前旋转角度（度，顺时针为正）
 
     private RulerGesture _rulerGesture = RulerGesture.None;
+    private uint _rulerGesturePointerId; // 当前直尺手势的指针 ID，拒绝第二根手指干扰
     private Point _gestureStart;      // 手势起点（尺规图层坐标）
     private double _gestureStartLeft;
     private double _gestureStartTop;
     private int _gestureStartCm;
-    private double _gestureStartHalfAngle; // 圆规调开口手势起始的半角（度）
+
+    // ---- 圆规手势：与直尺手势各自独立，可由另一根手指同时操作 ----
+    private RulerGesture _compassGesture = RulerGesture.None;
+    private uint _compassGesturePointerId;
+    private Point _compassGestureStart;
+    private double _compassGestureStartLeft;
+    private double _compassGestureStartTop;
+    private double _compassGestureStartHalfAngle;
 
     // ---- 尺边吸附画直线 ----
     private const double RulerSnapTolerance = 14; // 距刻度边多少逻辑像素内触发吸附
-    private bool _rulerSnapActive;      // 本次笔画是否为贴尺边画直线
-    private Point _snapStart;           // 吸附起点（画布坐标，已投影到尺边上）
-    private Point _snapEdgeStart;       // 尺边左端（画布坐标）
-    private Point _snapEdgeDir;         // 尺边方向单位向量
-    private double _snapEdgeLen;        // 尺边长度
-    private Point _snapOutward;         // 尺边外法线方向（读数标签侧）
-    private TextBlock? _snapLabel;      // 实时长度读数（厘米，两位小数）
+    private TextBlock? _snapLabel;      // 实时长度读数（厘米，两位小数），同一时刻只显示一个
     private double _lastPointerAngle; // 旋转手势中上一次指针相对尺心的角度
     private bool _rotateMoved;        // 旋转手势是否已真正移动（用于区分单击）
+
+    /// <summary>一次吸附命中：落笔投影点 + 尺边几何（写进会话，供贴边画直线使用）。</summary>
+    private readonly record struct SnapHit(
+        Point Projected, Point EdgeStart, Point EdgeDir, double EdgeLen, Point Outward);
 
     // ---- 量角器 / 三角板：可同时存在多只的独立量具 ----
     private const int MeasureToolMaxPerKind = 3;
@@ -555,6 +606,7 @@ public sealed partial class AnnotationCanvasWindow : Window
         _rulerAngle = 0;
         _rulerCmCount = RulerMinCm;
         _rulerGesture = RulerGesture.None;
+        _rulerGesturePointerId = 0;
         ScreenRulerOption.Background = TransparentBrush;
     }
 
@@ -578,10 +630,13 @@ public sealed partial class AnnotationCanvasWindow : Window
     {
         e.Handled = true;
         if (_screenRuler is null) return;
+        // 尺规手势只认一根指针：已有手势在进行时忽略第二根手指
+        if (_rulerGesture != RulerGesture.None) return;
         _gestureStart = e.GetCurrentPoint(RulerLayer).Position;
         _lastPointerAngle = PointerAngleToRulerCenter(_gestureStart);
         _rotateMoved = false;
         _rulerGesture = RulerGesture.Rotate;
+        _rulerGesturePointerId = e.Pointer.PointerId;
         RulerLayer.CapturePointer(e.Pointer);
     }
 
@@ -590,9 +645,11 @@ public sealed partial class AnnotationCanvasWindow : Window
     {
         e.Handled = true;
         if (_screenRuler is null) return;
+        if (_rulerGesture != RulerGesture.None) return;
         _gestureStart = e.GetCurrentPoint(RulerLayer).Position;
         _gestureStartCm = _rulerCmCount;
         _rulerGesture = RulerGesture.Resize;
+        _rulerGesturePointerId = e.Pointer.PointerId;
         RulerLayer.CapturePointer(e.Pointer);
     }
 
@@ -610,10 +667,12 @@ public sealed partial class AnnotationCanvasWindow : Window
 
         e.Handled = true;
         if (_screenRuler is null) return;
+        if (_rulerGesture != RulerGesture.None) return;
         _gestureStart = e.GetCurrentPoint(RulerLayer).Position;
         _gestureStartLeft = Canvas.GetLeft(_screenRuler);
         _gestureStartTop = Canvas.GetTop(_screenRuler);
         _rulerGesture = RulerGesture.Drag;
+        _rulerGesturePointerId = e.Pointer.PointerId;
         RulerLayer.CapturePointer(e.Pointer);
     }
 
@@ -625,11 +684,23 @@ public sealed partial class AnnotationCanvasWindow : Window
             e.Handled = true;
             return;
         }
-        if (_rulerGesture == RulerGesture.None) return;
-        // 直尺手势只在尺子存在时处理；圆规手势不依赖尺子
-        if (_screenRuler is null && _rulerGesture is RulerGesture.Drag or RulerGesture.Rotate or RulerGesture.Resize) return;
-        e.Handled = true;
+
         var pt = e.GetCurrentPoint(RulerLayer).Position;
+
+        // 圆规手势：只认发起它的那根手指；可与直尺手势同时进行
+        if (_compassGesture != RulerGesture.None
+            && e.Pointer.PointerId == _compassGesturePointerId
+            && _compass is not null)
+        {
+            e.Handled = true;
+            HandleCompassGesture(pt);
+            return;
+        }
+
+        // 直尺手势
+        if (_rulerGesture == RulerGesture.None || e.Pointer.PointerId != _rulerGesturePointerId) return;
+        if (_screenRuler is null) return;
+        e.Handled = true;
         switch (_rulerGesture)
         {
             case RulerGesture.Drag:
@@ -660,20 +731,27 @@ public sealed partial class AnnotationCanvasWindow : Window
                 if (target != _rulerCmCount) RebuildRulerKeepingPlacement(target);
                 break;
             }
+        }
+    }
 
+    /// <summary>圆规手势的移动处理：拖动整只 / 调开口 / 画弧（状态与直尺完全分离）。</summary>
+    private void HandleCompassGesture(Point pt)
+    {
+        switch (_compassGesture)
+        {
             case RulerGesture.CompassDrag:
                 _compassNeedle = new Point(
-                    _gestureStartLeft + pt.X - _gestureStart.X,
-                    _gestureStartTop + pt.Y - _gestureStart.Y);
+                    _compassGestureStartLeft + pt.X - _compassGestureStart.X,
+                    _compassGestureStartTop + pt.Y - _compassGestureStart.Y);
                 ApplyCompassTransform();
                 break;
 
             case RulerGesture.CompassResize:
             {
-                double theta0 = _gestureStartHalfAngle * Math.PI / 180;
+                double theta0 = _compassGestureStartHalfAngle * Math.PI / 180;
                 // 让半径变化跟手（Δr ≈ Δx），再换算回半角增量
-                double dDeg = (pt.X - _gestureStart.X) * 180 / (Math.PI * 2 * CompassLegLength * Math.Cos(theta0));
-                double target = Math.Clamp(_gestureStartHalfAngle + dDeg, CompassMinHalfAngle, CompassMaxHalfAngle);
+                double dDeg = (pt.X - _compassGestureStart.X) * 180 / (Math.PI * 2 * CompassLegLength * Math.Cos(theta0));
+                double target = Math.Clamp(_compassGestureStartHalfAngle + dDeg, CompassMinHalfAngle, CompassMaxHalfAngle);
                 if (Math.Abs(target - _compassHalfAngle) >= 0.2)
                 {
                     _compassHalfAngle = target;
@@ -705,7 +783,7 @@ public sealed partial class AnnotationCanvasWindow : Window
 
     private void OnRulerPointerReleased(object sender, PointerRoutedEventArgs e)
     {
-        if (_measureTools.FirstOrDefault(t => t.IsBusy) is { } measureTool)
+        if (_measureTools.FirstOrDefault(t => t.IsBusy && t.GesturePointerId == e.Pointer.PointerId) is { } measureTool)
         {
             e.Handled = true;
             // 先结束手势再释放捕获：ReleasePointerCapture 会同步触发 CaptureLost
@@ -713,35 +791,62 @@ public sealed partial class AnnotationCanvasWindow : Window
             RulerLayer.ReleasePointerCapture(e.Pointer);
             return;
         }
-        if (_rulerGesture == RulerGesture.None) return;
+
+        // 圆规手势（与直尺手势各自独立）
+        if (_compassGesture != RulerGesture.None && e.Pointer.PointerId == _compassGesturePointerId)
+        {
+            e.Handled = true;
+            var compassGesture = _compassGesture;
+            _compassGesture = RulerGesture.None;
+            _compassGesturePointerId = 0;
+            RulerLayer.ReleasePointerCapture(e.Pointer);
+            if (compassGesture == RulerGesture.CompassDraw)
+            {
+                // 收笔：落笔即点、拖动成弧在此定稿
+                if (_compassStroke is not null) FinishPenStroke(_compassStroke);
+                _compassStroke = null;
+            }
+            return;
+        }
+
+        if (_rulerGesture == RulerGesture.None || e.Pointer.PointerId != _rulerGesturePointerId) return;
         e.Handled = true;
         var gesture = _rulerGesture;
         // 先结束手势再释放捕获：ReleasePointerCapture 会同步触发 CaptureLost
         _rulerGesture = RulerGesture.None;
         RulerLayer.ReleasePointerCapture(e.Pointer);
+        _rulerGesturePointerId = 0;
         if (gesture == RulerGesture.Rotate && !_rotateMoved)
         {
             // 单击旋转按钮：顺时针吸附到下一个 90°
             _rulerAngle = NormalizeAngle(Math.Round(_rulerAngle / 90) * 90 + 90);
             ApplyRulerTransform();
         }
-        if (gesture == RulerGesture.CompassDraw)
-        {
-            // 收笔：落笔即点、拖动成弧在此定稿
-            FinishStroke();
-            _compassStroke = null;
-        }
     }
 
     private void OnRulerPointerCaptureLost(object sender, PointerRoutedEventArgs e)
     {
-        foreach (var measureTool in _measureTools) measureTool.EndGesture();
-        if (_rulerGesture == RulerGesture.CompassDraw)
+        // 只结束由这根指针发起的手势，避免第二根手指的捕获丢失打断正在进行的操作
+        foreach (var measureTool in _measureTools)
         {
-            FinishStroke();
-            _compassStroke = null;
+            if (measureTool.IsBusy && measureTool.GesturePointerId == e.Pointer.PointerId)
+                measureTool.EndGesture();
         }
-        _rulerGesture = RulerGesture.None;
+        if (_compassGesture != RulerGesture.None && e.Pointer.PointerId == _compassGesturePointerId)
+        {
+            if (_compassGesture == RulerGesture.CompassDraw)
+            {
+                if (_compassStroke is not null) FinishPenStroke(_compassStroke);
+                _compassStroke = null;
+            }
+            _compassGesture = RulerGesture.None;
+            _compassGesturePointerId = 0;
+        }
+        if (_rulerGesture != RulerGesture.None && e.Pointer.PointerId == _rulerGesturePointerId)
+        {
+            _rulerGesture = RulerGesture.None;
+            _rulerGesturePointerId = 0;
+        }
     }
 
     /// <summary>滚轮：向上滚逆时针、向下滚顺时针旋转。</summary>
@@ -916,8 +1021,8 @@ public sealed partial class AnnotationCanvasWindow : Window
 
     // ---- 尺边吸附画直线 ----
 
-    /// <summary>落笔点是否贴着尺子的刻度边（顶边）：是则记录尺边几何并返回投影后的吸附起点，否则返回 null。</summary>
-    private Point? TrySnapToRulerEdge(Point p)
+    /// <summary>落笔点是否贴着尺子的刻度边（顶边）：是则返回投影点与尺边几何，否则返回 null。</summary>
+    private SnapHit? TrySnapToRulerEdge(Point p)
     {
         if (_screenRuler is null) return null;
         var transform = _screenRuler.TransformToVisual(Root);
@@ -933,33 +1038,25 @@ public sealed partial class AnnotationCanvasWindow : Window
         if (Math.Sqrt(perpX * perpX + perpY * perpY) > RulerSnapTolerance) return null;
         if (proj < -8 || proj > len + 8) return null;
 
-        _snapEdgeStart = a;
-        _snapEdgeDir = dir;
-        _snapEdgeLen = len;
-
         // 外法线：背离尺身中心的一侧，用于放置长度读数
         var center = transform.TransformPoint(new Point(_screenRuler.Width / 2, _screenRuler.Height / 2));
         double midX = (a.X + b.X) / 2, midY = (a.Y + b.Y) / 2;
         double nx = midX - center.X, ny = midY - center.Y;
         double nl = Math.Sqrt(nx * nx + ny * ny);
-        _snapOutward = nl > 0.01 ? new Point(nx / nl, ny / nl) : new Point(0, -1);
+        var outward = nl > 0.01 ? new Point(nx / nl, ny / nl) : new Point(0, -1);
 
         proj = Math.Clamp(proj, 0, len);
-        return new Point(a.X + dir.X * proj, a.Y + dir.Y * proj);
+        return new SnapHit(new Point(a.X + dir.X * proj, a.Y + dir.Y * proj), a, dir, len, outward);
     }
 
-    /// <summary>落笔点贴着任一量具的可吸附边：把该边几何写进共享字段，返回投影后的吸附起点。
+    /// <summary>落笔点贴着任一量具的可吸附边：返回该边几何与投影起点。
     /// 三角板三条边里取最近的一条，量角器只认底边；都不命中时退回直尺的刻度边。</summary>
-    private Point? TrySnapToAnyEdge(Point p)
+    private SnapHit? TrySnapToAnyEdge(Point p)
     {
         for (int i = _measureTools.Count - 1; i >= 0; i--)
         {
             if (_measureTools[i].TrySnap(p, Root) is not { } snap) continue;
-            _snapEdgeStart = snap.Start;
-            _snapEdgeDir = snap.Dir;
-            _snapEdgeLen = snap.Length;
-            _snapOutward = snap.Outward;
-            return snap.Projected;
+            return new SnapHit(snap.Projected, snap.Start, snap.Dir, snap.Length, snap.Outward);
         }
         return TrySnapToRulerEdge(p);
     }
@@ -1042,18 +1139,18 @@ public sealed partial class AnnotationCanvasWindow : Window
         return null;
     }
 
-    /// <summary>量具手势的移动分发：射线拖动优先，其次拖动/旋转/调尺寸。返回是否已消费。</summary>
+    /// <summary>量具手势的移动分发：按指针 ID 精确匹配，不同手指可各操作一只量具。</summary>
     private bool DispatchMeasurePointerMoved(PointerRoutedEventArgs e)
     {
         if (_measureTools.Count == 0) return false;
         var pt = e.GetCurrentPoint(RulerLayer).Position;
 
-        if (_measureTools.FirstOrDefault(t => t.RayDragging) is { } ray)
+        if (_measureTools.FirstOrDefault(t => t.RayDragging && t.GesturePointerId == e.Pointer.PointerId) is { } ray)
         {
             ray.DragRay(pt);
             return true;
         }
-        if (_measureTools.FirstOrDefault(t => t.Gesture != MeasureGesture.None) is { } tool)
+        if (_measureTools.FirstOrDefault(t => t.Gesture != MeasureGesture.None && t.GesturePointerId == e.Pointer.PointerId) is { } tool)
         {
             tool.PointerMoved(pt, e.KeyModifiers.HasFlag(VirtualKeyModifiers.Shift));
             return true;
@@ -1084,32 +1181,38 @@ public sealed partial class AnnotationCanvasWindow : Window
             Color = _penColor
         };
         draft.Points.Add(p);
+        draft.MinX = draft.MaxX = p.X;
+        draft.MinY = draft.MaxY = p.Y;
 
         InkLayer.Children.Add(line);
         return draft;
     }
 
     /// <summary>贴边画线中：指针投影到尺边上（钳在尺边范围内）作为终点，实时刷新直线与长度读数。</summary>
-    private void UpdateRulerSnap(Point p)
+    private void UpdateRulerSnap(PointerSession session, Point p)
     {
-        double proj = (p.X - _snapEdgeStart.X) * _snapEdgeDir.X + (p.Y - _snapEdgeStart.Y) * _snapEdgeDir.Y;
-        proj = Math.Clamp(proj, 0, _snapEdgeLen);
-        var end = new Point(_snapEdgeStart.X + _snapEdgeDir.X * proj, _snapEdgeStart.Y + _snapEdgeDir.Y * proj);
+        double proj = (p.X - session.SnapEdgeStart.X) * session.SnapEdgeDir.X
+                    + (p.Y - session.SnapEdgeStart.Y) * session.SnapEdgeDir.Y;
+        proj = Math.Clamp(proj, 0, session.SnapEdgeLen);
+        var end = new Point(
+            session.SnapEdgeStart.X + session.SnapEdgeDir.X * proj,
+            session.SnapEdgeStart.Y + session.SnapEdgeDir.Y * proj);
 
         // 密化轮廓点，橡皮的逐点命中判定与切割直接复用
-        var points = DensifySegment(_snapStart, end);
-        var draft = _shapeDraft!;
+        var points = DensifySegment(session.SnapStart, end);
+        var draft = session.ShapeDraft!;
         draft.Points.Clear();
         draft.Points.AddRange(points);
+        RefreshBounds(draft);
         var line = (Polyline)draft.Visual;
         line.Points.Clear();
         foreach (var q in points) line.Points.Add(q);
 
-        UpdateSnapLabel(end, Distance(_snapStart, end));
+        UpdateSnapLabel(end, Distance(session.SnapStart, end), session.SnapOutward);
     }
 
     /// <summary>显示/刷新长度读数：厘米为单位，精确到小数点后两位，颜色跟随当前画笔。</summary>
-    private void UpdateSnapLabel(Point end, double lengthPx)
+    private void UpdateSnapLabel(Point end, double lengthPx, Point outward)
     {
         if (_snapLabel is null)
         {
@@ -1123,8 +1226,8 @@ public sealed partial class AnnotationCanvasWindow : Window
             RulerLayer.Children.Add(_snapLabel);
         }
         _snapLabel.Text = $"{lengthPx / RulerCmPx:0.00}";
-        Canvas.SetLeft(_snapLabel, end.X + _snapOutward.X * 30 - 14);
-        Canvas.SetTop(_snapLabel, end.Y + _snapOutward.Y * 30 - 9);
+        Canvas.SetLeft(_snapLabel, end.X + outward.X * 30 - 14);
+        Canvas.SetTop(_snapLabel, end.Y + outward.Y * 30 - 9);
     }
 
     private void HideSnapLabel()
@@ -1160,12 +1263,13 @@ public sealed partial class AnnotationCanvasWindow : Window
     private void HideCompass()
     {
         if (_compass is null) return;
-        if (_rulerGesture == RulerGesture.CompassDraw)
+        if (_compassGesture == RulerGesture.CompassDraw)
         {
-            FinishStroke();
+            if (_compassStroke is not null) FinishPenStroke(_compassStroke);
             _compassStroke = null;
         }
-        _rulerGesture = RulerGesture.None;
+        _compassGesture = RulerGesture.None;
+        _compassGesturePointerId = 0;
         RulerLayer.Children.Remove(_compass);
         _compass = null;
         _compassRadiusLine = null;
@@ -1234,10 +1338,12 @@ public sealed partial class AnnotationCanvasWindow : Window
     {
         e.Handled = true;
         if (_compass is null) return;
-        _gestureStart = e.GetCurrentPoint(RulerLayer).Position;
-        _gestureStartLeft = _compassNeedle.X;
-        _gestureStartTop = _compassNeedle.Y;
-        _rulerGesture = RulerGesture.CompassDrag;
+        if (_compassGesture != RulerGesture.None) return;
+        _compassGestureStart = e.GetCurrentPoint(RulerLayer).Position;
+        _compassGestureStartLeft = _compassNeedle.X;
+        _compassGestureStartTop = _compassNeedle.Y;
+        _compassGesture = RulerGesture.CompassDrag;
+        _compassGesturePointerId = e.Pointer.PointerId;
         RulerLayer.CapturePointer(e.Pointer);
     }
 
@@ -1246,9 +1352,11 @@ public sealed partial class AnnotationCanvasWindow : Window
     {
         e.Handled = true;
         if (_compass is null) return;
-        _gestureStart = e.GetCurrentPoint(RulerLayer).Position;
-        _gestureStartHalfAngle = _compassHalfAngle;
-        _rulerGesture = RulerGesture.CompassResize;
+        if (_compassGesture != RulerGesture.None) return;
+        _compassGestureStart = e.GetCurrentPoint(RulerLayer).Position;
+        _compassGestureStartHalfAngle = _compassHalfAngle;
+        _compassGesture = RulerGesture.CompassResize;
+        _compassGesturePointerId = e.Pointer.PointerId;
         RulerLayer.CapturePointer(e.Pointer);
     }
 
@@ -1258,14 +1366,14 @@ public sealed partial class AnnotationCanvasWindow : Window
     {
         e.Handled = true;
         if (_compass is null) return;
+        if (_compassGesture != RulerGesture.None) return;
         _compassLastPointerAngle = PointerAngleToCompassCenter(e.GetCurrentPoint(RulerLayer).Position);
-        // 圆心落点：单点笔迹在 FinishStroke 中补成圆点
-        _current = BeginStroke(_compassNeedle);
-        FinishStroke();
+        // 圆心落点：单点笔迹补成圆点后立即定稿（只提交这一条，不触碰其它会话）
+        CommitSingleStroke(BeginStroke(_compassNeedle));
         // 笔尖落点：画弧的起笔点
-        _current = BeginStroke(CompassPencilCanvasPos());
-        _compassStroke = _current;
-        _rulerGesture = RulerGesture.CompassDraw;
+        _compassStroke = BeginStroke(CompassPencilCanvasPos());
+        _compassGesture = RulerGesture.CompassDraw;
+        _compassGesturePointerId = e.Pointer.PointerId;
         RulerLayer.CapturePointer(e.Pointer);
     }
 
@@ -1570,7 +1678,6 @@ public sealed partial class AnnotationCanvasWindow : Window
             || !double.TryParse(tag, out double radius)) return;
 
         _eraserRadius = radius;
-        _eraseRadiusEffective = radius;
         UpdateEraserSizeVisuals();
     }
 
@@ -1581,8 +1688,8 @@ public sealed partial class AnnotationCanvasWindow : Window
         string size = _eraserRadius < 9 ? "小" : _eraserRadius < 16 ? "中" : "大";
         EraserSizeLabel.Text = $"大小 {size}";
 
-        EraserImage.Width = EraserVisualSize;
-        EraserImage.Height = EraserVisualSize;
+        EraserImage.Width = EraserVisualSize(null);
+        EraserImage.Height = EraserVisualSize(null);
     }
 
     // ── 几何图形设置面板：图形选择 + 三档粗细 ──
@@ -1931,10 +2038,11 @@ public sealed partial class AnnotationCanvasWindow : Window
         var position = point.Position;
         UpdateEraserVisual(position, e.OriginalSource);
 
-        // 桌面交互模式：手指触控不落笔（触控笔与鼠标不受影响）
-        if (AppSettings.InteractionMode == AnnotationInteractionMode.Desktop
-            && e.Pointer.PointerDeviceType == Microsoft.UI.Input.PointerDeviceType.Touch)
-            return;
+        // 交互模式与「多指绘图」开关共同决定这根指针能否落笔
+        if (!CanStartSession(e)) return;
+
+        // 掌压过滤：手掌接触面积远大于指尖，超过阈值时忽略这根触点
+        if (IsPalmContact(point, e.Pointer.PointerDeviceType)) return;
 
         if (point.Properties.IsRightButtonPressed)
         {
@@ -1944,45 +2052,74 @@ public sealed partial class AnnotationCanvasWindow : Window
         }
         if (!point.Properties.IsLeftButtonPressed) return;
 
-        // 记录本次按下的指针：移动/抬起只处理它，避免混入其它指针的事件
-        _activePointerId = e.Pointer.PointerId;
+        // 未开启多指绘图时只允许一根指针；同一根指针重复按下也直接忽略
+        if (!AppSettings.MultiTouchDrawing && _sessions.Count > 0) return;
+        if (_sessions.ContainsKey(e.Pointer.PointerId)) return;
+
         Root.CapturePointer(e.Pointer);
         e.Handled = true;
 
-        switch (_tool)
+        var session = new PointerSession { PointerId = e.Pointer.PointerId, Tool = _tool };
+        _sessions[session.PointerId] = session;
+
+        switch (session.Tool)
         {
             case AnnotationTool.Eraser:
-                _erasing = true;
-                _eraseRadiusEffective = _eraserRadius;
-                _eraseLastPoint = position;
-                _eraseLastTimestamp = Stopwatch.GetTimestamp();
-                _eraseRemoved.Clear();
-                _eraseFragments.Clear();
-                EraseAt(position);
+                session.Erasing = true;
+                session.EraseRadiusEffective = _eraserRadius;
+                session.EraseLastPoint = position;
+                session.EraseLastTimestamp = Stopwatch.GetTimestamp();
+                // 进入擦除后由该指针自己的贴图接管，收起悬停贴图避免残留重影
+                EraserImage.Visibility = Visibility.Collapsed;
+                UpdateEraserVisual(position, e.OriginalSource, session);
+                EraseAt(session, position);
                 break;
 
             case AnnotationTool.Pen:
                 // 落笔在直尺刻度边或量具可吸附边附近：贴边画直线；否则正常自由笔迹
-                if (TrySnapToAnyEdge(position) is { } snapStart)
+                if (TrySnapToAnyEdge(position) is { } snap)
                 {
-                    _rulerSnapActive = true;
-                    _snapStart = snapStart;
-                    _shapeDraft = BeginSnapDraft(snapStart);
-                    UpdateSnapLabel(snapStart, 0);
+                    session.SnapActive = true;
+                    session.SnapStart = snap.Projected;
+                    session.SnapEdgeStart = snap.EdgeStart;
+                    session.SnapEdgeDir = snap.EdgeDir;
+                    session.SnapEdgeLen = snap.EdgeLen;
+                    session.SnapOutward = snap.Outward;
+                    session.ShapeDraft = BeginSnapDraft(snap.Projected);
+                    UpdateSnapLabel(snap.Projected, 0, snap.Outward);
                 }
                 else
                 {
-                    _current = BeginStroke(position);
+                    session.Current = BeginStroke(position);
                 }
                 break;
 
             case AnnotationTool.Shapes:
-                _shapeStart = position;
-                _shapeDraft = BeginShapeDraft(position);
+                session.ShapeStart = position;
+                session.ShapeDraft = BeginShapeDraft(position);
                 break;
 
             // 尺规：本阶段占位，不响应绘制
         }
+    }
+
+    /// <summary>这根指针是否有资格开始绘制会话：
+    /// 鼠标/触控笔始终可以；手指在桌面交互模式下需开启「多指绘图」，
+    /// 在屏幕触控模式下始终可以（是否并发由开关在按下处再判断）。</summary>
+    private static bool CanStartSession(PointerRoutedEventArgs e)
+    {
+        if (e.Pointer.PointerDeviceType != Microsoft.UI.Input.PointerDeviceType.Touch) return true;
+        return AppSettings.InteractionMode != AnnotationInteractionMode.Desktop
+            || AppSettings.MultiTouchDrawing;
+    }
+
+    /// <summary>掌压过滤：触点最大边长超过阈值时视为手掌并忽略（阈值 0 表示关闭，只对触屏生效）。</summary>
+    private static bool IsPalmContact(Microsoft.UI.Input.PointerPoint point, Microsoft.UI.Input.PointerDeviceType deviceType)
+    {
+        double threshold = AppSettings.PalmRejectionThreshold;
+        if (threshold <= 0 || deviceType != Microsoft.UI.Input.PointerDeviceType.Touch) return false;
+        var contact = point.Properties.ContactRect;
+        return Math.Max(contact.Width, contact.Height) >= threshold;
     }
 
     /// <summary>新建一条几何图形草稿：先挂预览，松手时才入栈提交。
@@ -2013,20 +2150,23 @@ public sealed partial class AnnotationCanvasWindow : Window
             Shape = _shapeKind
         };
         draft.Points.Add(p);
+        draft.MinX = draft.MaxX = p.X;
+        draft.MinY = draft.MaxY = p.Y;
 
         InkLayer.Children.Add(line);
         return draft;
     }
 
     /// <summary>拖动时按当前图形类型重建轮廓点并刷新预览。</summary>
-    private void UpdateShapeDraft(Point end)
+    private void UpdateShapeDraft(PointerSession session, Point end)
     {
-        var draft = _shapeDraft!;
+        var draft = session.ShapeDraft!;
         var line = (Polyline)draft.Visual;
 
-        var points = BuildShapePoints(_shapeKind, _shapeStart, end);
+        var points = BuildShapePoints(draft.Shape, session.ShapeStart, end);
         draft.Points.Clear();
         draft.Points.AddRange(points);
+        RefreshBounds(draft);
         line.Points.Clear();
         foreach (var p in points) line.Points.Add(p);
     }
@@ -2261,6 +2401,8 @@ public sealed partial class AnnotationCanvasWindow : Window
         stroke.HalfWidths.Add(stroke.BaseThickness / 2 * (stroke.Kind == PenKind.Soft ? 0.6 : 1));
         stroke.Speeds.Add(0.2);
         stroke.LastTimestamp = Stopwatch.GetTimestamp();
+        stroke.MinX = stroke.MaxX = p.X;
+        stroke.MinY = stroke.MaxY = p.Y;
 
         if (visual is Polyline line)
         {
@@ -2281,7 +2423,7 @@ public sealed partial class AnnotationCanvasWindow : Window
     }
 
     /// <summary>追加一个采样点。软笔按“点间距≈笔速”估算笔压：行笔快则细、慢则粗。</summary>
-    private static void AppendStrokePoint(InkStroke stroke, Point p)
+    private void AppendStrokePoint(InkStroke stroke, Point p)
     {
         if (stroke.Kind == PenKind.Soft)
         {
@@ -2313,6 +2455,10 @@ public sealed partial class AnnotationCanvasWindow : Window
         }
 
         stroke.Points.Add(p);
+        if (p.X < stroke.MinX) stroke.MinX = p.X;
+        if (p.X > stroke.MaxX) stroke.MaxX = p.X;
+        if (p.Y < stroke.MinY) stroke.MinY = p.Y;
+        if (p.Y > stroke.MaxY) stroke.MaxY = p.Y;
 
         if (stroke.Visual is Polyline line)
         {
@@ -2320,8 +2466,26 @@ public sealed partial class AnnotationCanvasWindow : Window
         }
         else
         {
-            RebuildSoftInk(stroke);
+            // 软笔轮廓按帧合并重建：同一帧内连续追加的多个点只重算一次
+            MarkSoftInkDirty(stroke);
         }
+    }
+
+    /// <summary>标记软笔需要重建轮廓：同一 UI 帧内多次追加只重建一次。</summary>
+    private void MarkSoftInkDirty(InkStroke stroke)
+    {
+        _softDirty.Add(stroke);
+        if (_softRenderHooked) return;
+        _softRenderHooked = true;
+        Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += OnSoftInkRender;
+    }
+
+    private void OnSoftInkRender(object? sender, object e)
+    {
+        Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnSoftInkRender;
+        _softRenderHooked = false;
+        foreach (var stroke in _softDirty) RebuildSoftInk(stroke);
+        _softDirty.Clear();
     }
 
     /// <summary>按各点半宽生成左右边界，拼成闭合轮廓填充（笔锋即来自宽度差异）。
@@ -2504,11 +2668,15 @@ public sealed partial class AnnotationCanvasWindow : Window
     {
         var point = e.GetCurrentPoint(Root);
         var p = point.Position;
-        UpdateEraserVisual(p, e.OriginalSource);
 
-        if (e.Pointer.PointerId != _activePointerId) return;
+        // 没有对应会话（例如按下时被交互模式过滤）：贴图仍跟随，与旧行为一致
+        if (!_sessions.TryGetValue(e.Pointer.PointerId, out var session))
+        {
+            UpdateEraserVisual(p, e.OriginalSource);
+            return;
+        }
 
-        if (_erasing)
+        if (session.Erasing)
         {
             if (!point.Properties.IsLeftButtonPressed) return;
 
@@ -2516,47 +2684,47 @@ public sealed partial class AnnotationCanvasWindow : Window
             if (AppSettings.SpeedEraser)
             {
                 long now = Stopwatch.GetTimestamp();
-                double dtMs = (now - _eraseLastTimestamp) * 1000.0 / Stopwatch.Frequency;
-                double segment = Distance(p, _eraseLastPoint);
-                _eraseLastPoint = p;
-                _eraseLastTimestamp = now;
+                double dtMs = (now - session.EraseLastTimestamp) * 1000.0 / Stopwatch.Frequency;
+                double segment = Distance(p, session.EraseLastPoint);
+                session.EraseLastPoint = p;
+                session.EraseLastTimestamp = now;
                 if (dtMs > 0.5)
                 {
                     double speed = segment / dtMs;   // px/ms
                     double target = Math.Clamp(
                         _eraserRadius * (0.65 + speed * 0.5),
                         _eraserRadius * 0.6, _eraserRadius * 2.2);
-                    _eraseRadiusEffective += (target - _eraseRadiusEffective) * 0.35;
+                    session.EraseRadiusEffective += (target - session.EraseRadiusEffective) * 0.35;
                 }
             }
             else
             {
-                _eraseRadiusEffective = _eraserRadius;
+                session.EraseRadiusEffective = _eraserRadius;
             }
 
-            UpdateEraserVisual(p, e.OriginalSource);
-            EraseAt(p);
+            UpdateEraserVisual(p, e.OriginalSource, session);
+            EraseAt(session, p);
             return;
         }
 
-        if (_rulerSnapActive)
+        if (session.SnapActive)
         {
-            UpdateRulerSnap(p);
+            UpdateRulerSnap(session, p);
             return;
         }
 
-        if (_shapeDraft is not null)
+        if (session.ShapeDraft is not null)
         {
-            UpdateShapeDraft(p);
+            UpdateShapeDraft(session, p);
             return;
         }
 
-        if (_current is null) return;
-        var last = _current.Points[^1];
+        if (session.Current is null) return;
+        var last = session.Current.Points[^1];
         // 过滤抖动：采样点间距过小会让法线方向乱跳，轮廓更容易自交；间距档位由设置决定
         double minDistance = MinSampleDistance;
         if (Math.Abs(p.X - last.X) < minDistance && Math.Abs(p.Y - last.Y) < minDistance) return;
-        AppendStrokePoint(_current, p);
+        AppendStrokePoint(session.Current, p);
     }
 
     /// <summary>采样点最小间距：高频更密（笔迹更细腻），低频更疏（更省性能）。</summary>
@@ -2570,39 +2738,36 @@ public sealed partial class AnnotationCanvasWindow : Window
     /// <summary>指针离开画布：隐藏橡皮贴图。</summary>
     private void OnPointerExited(object sender, PointerRoutedEventArgs e) => HideEraserVisual();
 
-    /// <summary>指针抬起：释放捕获并结束当前笔迹/草稿。</summary>
+    /// <summary>指针抬起：释放捕获并结束该指针的会话。</summary>
     private void OnPointerReleased(object sender, PointerRoutedEventArgs e)
     {
-        if (e.Pointer.PointerId != _activePointerId) return;
-
-        _activePointerId = 0;
         Root.ReleasePointerCapture(e.Pointer);
-        FinishStroke();
+        if (!_sessions.Remove(e.Pointer.PointerId, out var session)) return;
+        FinishSession(session);
     }
 
-    /// <summary>指针捕获丢失：重置活动指针并结束绘制。</summary>
+    /// <summary>指针捕获丢失：结束该指针的会话。</summary>
     private void OnPointerCaptureLost(object sender, PointerRoutedEventArgs e)
     {
-        if (e.Pointer.PointerId != _activePointerId) return;
-        _activePointerId = 0;
-        FinishStroke();
+        if (!_sessions.Remove(e.Pointer.PointerId, out var session)) return;
+        FinishSession(session);
     }
 
-    /// <summary>结束当前笔迹；点一下不拖则补一个极短线段，让它显示为圆点。软笔此时收笔出锋。
-    /// 几何图形草稿在此提交：太短视为误触直接丢弃，否则作为一条可撤销的笔迹入栈。</summary>
-    private void FinishStroke()
+    /// <summary>结束一根指针的绘制会话：笔迹定稿、图形草稿提交、橡皮记录合并。
+    /// 点一下不拖则补一个极短线段显示为圆点；几何图形太短视为误触直接丢弃。</summary>
+    private void FinishSession(PointerSession session)
     {
         // 贴边画线结束：复位吸附状态并隐藏长度读数（草稿按下方图形流程提交）
-        if (_rulerSnapActive)
+        if (session.SnapActive)
         {
-            _rulerSnapActive = false;
+            session.SnapActive = false;
             HideSnapLabel();
         }
 
-        if (_shapeDraft is not null)
+        if (session.ShapeDraft is not null)
         {
-            var draft = _shapeDraft;
-            _shapeDraft = null;
+            var draft = session.ShapeDraft;
+            session.ShapeDraft = null;
 
             if (ShapeExtent(draft) < 3)
             {
@@ -2610,6 +2775,7 @@ public sealed partial class AnnotationCanvasWindow : Window
             }
             else
             {
+                RefreshBounds(draft);
                 _strokes.Add(draft);
                 _redo.Clear();
                 _undo.Push(new EditAction(
@@ -2618,18 +2784,33 @@ public sealed partial class AnnotationCanvasWindow : Window
             }
         }
 
-        if (_current is not null)
+        if (session.Current is not null)
         {
-            FinishPenStroke(_current);
+            FinishPenStroke(session.Current);
         }
-        _current = null;
-        CommitErase();
-        _erasing = false;
+        session.Current = null;
+        CommitErase(session);
+        bool wasErasing = session.Erasing;
+        session.Erasing = false;
+        // 抬起后移除该指针自己的橡皮贴图；悬停贴图一并收起，等下次移动再出现
+        HideEraserVisual(session);
+        if (wasErasing) EraserImage.Visibility = Visibility.Collapsed;
     }
+
+    /// <summary>结束所有会话（工具切换、撤销/重做/清空时调用）。</summary>
+    private void FinishAllSessions()
+    {
+        foreach (var session in _sessions.Values) FinishSession(session);
+        _sessions.Clear();
+        HideEraserVisual();
+    }
+
+    /// <summary>立即定稿单条笔迹（不影响其它会话）：圆规圆心落点这类“按下即完成”的笔迹用它。</summary>
+    private void CommitSingleStroke(InkStroke stroke) => FinishPenStroke(stroke);
 
     /// <summary>结束一条笔迹：点一下不拖则补一个极短线段，让它显示为圆点。
     /// 软笔按「抬笔时笔锋修正」设置决定是否做收笔平滑与出锋。</summary>
-    private static void FinishPenStroke(InkStroke stroke)
+    private void FinishPenStroke(InkStroke stroke)
     {
         if (stroke.Points.Count == 1)
         {
@@ -2648,19 +2829,24 @@ public sealed partial class AnnotationCanvasWindow : Window
                 SmoothHalfWidths(stroke);
                 TaperSoftInkEnd(stroke);
             }
+            // 收笔定稿：撤销按帧重建标记并同步一次轮廓，避免与收笔修正的顺序打架
+            _softDirty.Remove(stroke);
             RebuildSoftInk(stroke);
         }
+        RefreshBounds(stroke);
     }
 
     // ── 橡皮：面积擦 —— 擦除范围内的采样点被剔除，笔迹剩余部分拆成多段保留 ──
 
     /// <summary>以 position 为圆心、按擦除半径逐条切割笔迹，剩余片段原地替换。</summary>
-    private void EraseAt(Point position)
+    private void EraseAt(PointerSession session, Point position)
     {
         for (int i = _strokes.Count - 1; i >= 0; i--)
         {
             var stroke = _strokes[i];
-            var fragments = FragmentStroke(stroke, position);
+            // 跳过其它手指正在绘制的笔迹：尚未定稿，切走会让后续采样点落到已移除的图形上
+            if (_sessions.Values.Any(s => ReferenceEquals(s.Current, stroke))) continue;
+            var fragments = FragmentStroke(session, stroke, position);
             if (fragments is null) continue;      // 没擦到，保持原样
 
             // 记录原位：片段视觉插回被擦笔迹原来的图层位置，保证批注层级固定、后画恒覆盖先画
@@ -2669,20 +2855,20 @@ public sealed partial class AnnotationCanvasWindow : Window
             InkLayer.Children.Remove(stroke.Visual);
 
             // 拖动中切出来的片段再被切时，只需从片段集合里摘掉，撤销时才能还原到拖动前的状态
-            if (!_eraseFragments.Remove(stroke))
+            if (!session.EraseFragments.Remove(stroke))
             {
-                _eraseRemoved.Add(stroke);
-                _eraseRemovedIndex[stroke] = i;
+                session.EraseRemoved.Add(stroke);
+                session.EraseRemovedIndex[stroke] = i;
             }
-            _eraseFragmentIndex.Remove(stroke);
+            session.EraseFragmentIndex.Remove(stroke);
 
             for (int f = 0; f < fragments.Count; f++)
             {
                 _strokes.Insert(i + f, fragments[f]);
                 if (visualIndex >= 0) InkLayer.Children.Insert(visualIndex + f, fragments[f].Visual);
                 else InkLayer.Children.Add(fragments[f].Visual);
-                _eraseFragments.Add(fragments[f]);
-                _eraseFragmentIndex[fragments[f]] = i + f;
+                session.EraseFragments.Add(fragments[f]);
+                session.EraseFragmentIndex[fragments[f]] = i + f;
             }
             _redo.Clear();
         }
@@ -2690,17 +2876,26 @@ public sealed partial class AnnotationCanvasWindow : Window
 
     /// <summary>按擦除圆命中判断：返回 null 表示完全没擦到；返回空列表表示整条被擦掉；
     /// 否则返回剩余连续段的片段笔迹。</summary>
-    private List<InkStroke>? FragmentStroke(InkStroke stroke, Point eraser)
+    private List<InkStroke>? FragmentStroke(PointerSession session, InkStroke stroke, Point eraser)
     {
         var points = stroke.Points;
         int count = points.Count;
+
+        // 包围盒快速剔除：擦除圆离笔迹整体范围还有距离时直接跳过，省掉逐点判定
+        double margin = session.EraseRadiusEffective + stroke.BaseThickness;
+        if (eraser.X < stroke.MinX - margin || eraser.X > stroke.MaxX + margin
+            || eraser.Y < stroke.MinY - margin || eraser.Y > stroke.MaxY + margin)
+            return null;
+
         var erased = new bool[count];
         bool hit = false;
 
         for (int i = 0; i < count; i++)
         {
             double half = HalfWidthAt(stroke, i);
-            if (Distance(eraser, points[i]) <= _eraseRadiusEffective + half)
+            double reach = session.EraseRadiusEffective + half;
+            double dx = eraser.X - points[i].X, dy = eraser.Y - points[i].Y;
+            if (dx * dx + dy * dy <= reach * reach)
             {
                 erased[i] = true;
                 hit = true;
@@ -2780,6 +2975,7 @@ public sealed partial class AnnotationCanvasWindow : Window
         };
         fragment.Points.AddRange(points);
         fragment.HalfWidths.AddRange(halfWidths);
+        RefreshBounds(fragment);
 
         if (visual is Polyline line)
         {
@@ -2798,22 +2994,22 @@ public sealed partial class AnnotationCanvasWindow : Window
     }
 
     /// <summary>一次橡皮拖动结束后合并成一条撤销记录；撤销/重做都按原始下标恢复，层级保持稳定。</summary>
-    private void CommitErase()
+    private void CommitErase(PointerSession session)
     {
-        if (_eraseRemoved.Count == 0) return;
+        if (session.EraseRemoved.Count == 0) return;
 
-        var removed = _eraseRemoved
-            .OrderBy(s => _eraseRemovedIndex.TryGetValue(s, out var idx) ? idx : int.MaxValue)
-            .Select(s => (stroke: s, index: _eraseRemovedIndex.TryGetValue(s, out var idx) ? idx : int.MaxValue))
+        var removed = session.EraseRemoved
+            .OrderBy(s => session.EraseRemovedIndex.TryGetValue(s, out var idx) ? idx : int.MaxValue)
+            .Select(s => (stroke: s, index: session.EraseRemovedIndex.TryGetValue(s, out var idx) ? idx : int.MaxValue))
             .ToList();
-        var fragments = _eraseFragments
-            .OrderBy(s => _eraseFragmentIndex.TryGetValue(s, out var idx) ? idx : int.MaxValue)
-            .Select(s => (stroke: s, index: _eraseFragmentIndex.TryGetValue(s, out var idx) ? idx : int.MaxValue))
+        var fragments = session.EraseFragments
+            .OrderBy(s => session.EraseFragmentIndex.TryGetValue(s, out var idx) ? idx : int.MaxValue)
+            .Select(s => (stroke: s, index: session.EraseFragmentIndex.TryGetValue(s, out var idx) ? idx : int.MaxValue))
             .ToList();
-        _eraseRemoved.Clear();
-        _eraseFragments.Clear();
-        _eraseRemovedIndex.Clear();
-        _eraseFragmentIndex.Clear();
+        session.EraseRemoved.Clear();
+        session.EraseFragments.Clear();
+        session.EraseRemovedIndex.Clear();
+        session.EraseFragmentIndex.Clear();
 
         _undo.Push(new EditAction(
             () =>
@@ -2850,6 +3046,23 @@ public sealed partial class AnnotationCanvasWindow : Window
         InkLayer.Children.Remove(stroke.Visual);
     }
 
+    /// <summary>重算笔迹采样点包围盒（点集被整体替换或收笔时使用）。</summary>
+    private static void RefreshBounds(InkStroke stroke)
+    {
+        double minX = double.MaxValue, minY = double.MaxValue;
+        double maxX = double.MinValue, maxY = double.MinValue;
+        foreach (var p in stroke.Points)
+        {
+            if (p.X < minX) minX = p.X;
+            if (p.X > maxX) maxX = p.X;
+            if (p.Y < minY) minY = p.Y;
+            if (p.Y > maxY) maxY = p.Y;
+        }
+        if (minX > maxX) { minX = maxX = 0; minY = maxY = 0; }
+        stroke.MinX = minX; stroke.MinY = minY;
+        stroke.MaxX = maxX; stroke.MaxY = maxY;
+    }
+
     /// <summary>计算两点间的欧氏距离。</summary>
     private static double Distance(Point a, Point b)
     {
@@ -2862,7 +3075,7 @@ public sealed partial class AnnotationCanvasWindow : Window
     /// <summary>撤销上一步编辑操作。</summary>
     public void Undo()
     {
-        FinishStroke();
+        FinishAllSessions();
         if (_undo.Count == 0) return;
 
         var action = _undo.Pop();
@@ -2873,7 +3086,7 @@ public sealed partial class AnnotationCanvasWindow : Window
     /// <summary>重做上一步撤销的操作。</summary>
     public void Redo()
     {
-        FinishStroke();
+        FinishAllSessions();
         if (_redo.Count == 0) return;
 
         var action = _redo.Pop();
@@ -2884,7 +3097,7 @@ public sealed partial class AnnotationCanvasWindow : Window
     /// <summary>清空所有笔迹与撤销/重做栈（视为开启新的一页）。</summary>
     public void ClearAll()
     {
-        FinishStroke();
+        FinishAllSessions();
         // 清空视为开启新的一页：不做撤销
         _strokes.Clear();
         _undo.Clear();

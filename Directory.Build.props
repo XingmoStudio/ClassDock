@@ -2,8 +2,8 @@
 
   <PropertyGroup>
     <!-- 版本号唯一来源：桌面主程序与根目录启动器共用，目录名 App-{版本号} 也由此生成 -->
-    <Version>0.1.0.1</Version>
-    <!-- 不把 git 提交号追加到 InformationalVersion，否则 exe 的“产品版本”会显示 0.1.0.1+sha -->
+    <Version>0.1.1.2</Version>
+    <!-- 不把 git 提交号追加到 InformationalVersion，否则 exe 的“产品版本”会显示 版本号+sha -->
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
 
